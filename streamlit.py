@@ -46,7 +46,6 @@ st.markdown("""
 tab1, tab2 = st.tabs(["🧾 Jurnal Umum", "📚 Buku Besar"])
 
 with tab1:
-with tab1:
     st.header("🧾 Jurnal Umum (Input Transaksi)")
 
     # Inisialisasi DataFrame jurnal di session_state jika belum ada
