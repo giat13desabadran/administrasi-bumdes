@@ -95,11 +95,14 @@ with tab1:
         df_final = pd.concat([df_clean, total_row], ignore_index=True)
 
         st.write("### 📊 Hasil Jurnal")
-        st.dataframe(df_final.style.format({
+        df_final_display = df_final.copy()
+        df_final_display.index = range(1, len(df_final_display) + 1)
+        df_final_display.index.name = "No"
+        
+        st.dataframe(df_final_display.style.format({
             "Debit (Rp)": format_rupiah,
             "Kredit (Rp)": format_rupiah
         }))
-
         # === Fungsi buat PDF ===
         def buat_pdf(df):
             pdf = FPDF()
