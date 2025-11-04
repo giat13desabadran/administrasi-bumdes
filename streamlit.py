@@ -1,5 +1,3 @@
-ku kasih kodeku ya, ini kodeku
-
 import streamlit as st
 import pandas as pd
 from fpdf import FPDF
