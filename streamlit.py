@@ -38,7 +38,7 @@ tab1, tab2 = st.tabs(["🧾 Jurnal Umum", "📚 Buku Besar"])
 
 # ================= TAB 1 =====================
 with tab1:
-    st.header("🧾 Jurnal Umum (Editable Table)")
+    st.header("🧾 Jurnal Umum")
 
     st.info("✏️ Klik langsung di tabel untuk menambah atau mengubah data.")
     edited_df = st.data_editor(
