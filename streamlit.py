@@ -4,10 +4,13 @@ from fpdf import FPDF
 import tempfile
 
 st.set_page_config(page_title="Administrasi BUMDes", layout="wide")
-st.title("📘 Sistem Akuntansi Sederhana BUMDes - Januari 2025")
+st.title("📘 Sistem Akuntansi BUMDes")
 
+# Inisialisasi data awal
 if "data" not in st.session_state:
-    st.session_state.data = []
+    st.session_state.data = pd.DataFrame([
+        {"Tanggal": "", "Keterangan": "", "Ref": "", "Debit (Rp)": 0, "Kredit (Rp)": 0}
+    ])
 
 # Fungsi format rupiah
 def format_rupiah(x):
@@ -35,44 +38,48 @@ tab1, tab2 = st.tabs(["🧾 Jurnal Umum", "📚 Buku Besar"])
 
 # ================= TAB 1 =====================
 with tab1:
-    st.header("🧾 Jurnal Umum")
+    st.header("🧾 Jurnal Umum (Editable Table)")
 
-    with st.form("input_form"):
-        tanggal = st.date_input("Tanggal")
-        keterangan = st.text_input("Keterangan")
-        ref = st.text_input("Ref (contoh: 101 untuk Kas)")
-        debit = st.number_input("Debit (Rp)", min_value=0, step=1000)
-        kredit = st.number_input("Kredit (Rp)", min_value=0, step=1000)
-        submit = st.form_submit_button("Tambah Data")
+    st.info("✏️ Klik langsung di tabel untuk menambah atau mengubah data.")
+    edited_df = st.data_editor(
+        st.session_state.data,
+        num_rows="dynamic",
+        use_container_width=True,
+        key="editable_table",
+        column_config={
+            "Tanggal": st.column_config.TextColumn("Tanggal (misal: 2025-01-01)"),
+            "Keterangan": st.column_config.TextColumn("Keterangan"),
+            "Ref": st.column_config.TextColumn("Ref (contoh: 101)"),
+            "Debit (Rp)": st.column_config.NumberColumn("Debit (Rp)", step=1000),
+            "Kredit (Rp)": st.column_config.NumberColumn("Kredit (Rp)", step=1000),
+        }
+    )
 
-        if submit:
-            st.session_state.data.append({
-                "Tanggal": tanggal,
-                "Keterangan": keterangan,
-                "Ref": ref,
-                "Debit (Rp)": debit,
-                "Kredit (Rp)": kredit
-            })
-            st.success("✅ Data berhasil ditambahkan!")
+    # Simpan perubahan
+    st.session_state.data = edited_df
 
-    if st.session_state.data:
-        df = pd.DataFrame(st.session_state.data)
-        st.markdown("### 📋 Data Jurnal Umum")
-        st.write(style_excel(df).to_html(), unsafe_allow_html=True)
+    # Hapus baris kosong (opsional)
+    df_clean = edited_df.dropna(subset=["Keterangan"], how="all")
+    df_clean = df_clean[df_clean["Keterangan"] != ""]
 
-        total_debit = df["Debit (Rp)"].sum()
-        total_kredit = df["Kredit (Rp)"].sum()
+    if not df_clean.empty:
+        total_debit = df_clean["Debit (Rp)"].sum()
+        total_kredit = df_clean["Kredit (Rp)"].sum()
         st.markdown(f"**Total Debit:** {format_rupiah(total_debit)}")
         st.markdown(f"**Total Kredit:** {format_rupiah(total_kredit)}")
+    else:
+        st.warning("Belum ada data valid di tabel.")
 
 # ================= TAB 2 =====================
 with tab2:
-    st.header("📚 Buku Besar")
+    st.header("📚 Buku Besar (Otomatis dari Jurnal Umum)")
 
-    if st.session_state.data:
-        df = pd.DataFrame(st.session_state.data)
+    df = st.session_state.data.copy()
+    df = df.dropna(subset=["Ref"])
+    df = df[df["Ref"] != ""]
+
+    if not df.empty:
         grouped = df.groupby("Ref")
-
         for ref, group in grouped:
             st.subheader(f"Nama Akun (Ref): {ref}")
             st.write(style_excel(group).to_html(), unsafe_allow_html=True)
@@ -88,4 +95,4 @@ with tab2:
                 unsafe_allow_html=True
             )
     else:
-        st.info("Masukkan data terlebih dahulu di tab **Jurnal Umum**.")
+        st.info("Isi data terlebih dahulu di tab **Jurnal Umum**.")
