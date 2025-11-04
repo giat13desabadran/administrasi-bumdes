@@ -55,44 +55,61 @@ with tab1:
         }
     )
 
-    # Simpan perubahan
     st.session_state.data = edited_df
 
-    # Hapus baris kosong (opsional)
+    # Bersihkan data kosong
     df_clean = edited_df.dropna(subset=["Keterangan"], how="all")
     df_clean = df_clean[df_clean["Keterangan"] != ""]
 
     if not df_clean.empty:
         total_debit = df_clean["Debit (Rp)"].sum()
         total_kredit = df_clean["Kredit (Rp)"].sum()
-        st.markdown(f"**Total Debit:** {format_rupiah(total_debit)}")
-        st.markdown(f"**Total Kredit:** {format_rupiah(total_kredit)}")
+
+        # 🔹 Tambahkan baris total langsung ke bawah tabel
+        total_row = pd.DataFrame({
+            "Tanggal": [""],
+            "Keterangan": ["**TOTAL**"],
+            "Ref": [""],
+            "Debit (Rp)": [total_debit],
+            "Kredit (Rp)": [total_kredit],
+        })
+
+        df_final = pd.concat([df_clean, total_row], ignore_index=True)
+
+        st.write("### Hasil Jurnal")
+        st.dataframe(df_final.style.format({
+            "Debit (Rp)": format_rupiah,
+            "Kredit (Rp)": format_rupiah
+        }))
+
+        # 🔹 Download ke PDF
+        def buat_pdf(df):
+            pdf = FPDF()
+            pdf.add_page()
+            pdf.set_font("Arial", size=12)
+            pdf.cell(200, 10, txt="Jurnal Umum BUMDes", ln=True, align="C")
+            pdf.ln(8)
+
+            # Header tabel
+            for col in df.columns:
+                pdf.cell(38, 10, col, border=1)
+            pdf.ln()
+
+            # Isi tabel
+            for _, row in df.iterrows():
+                for item in row:
+                    pdf.cell(38, 10, str(item), border=1)
+                pdf.ln()
+
+            return pdf.output(dest="S").encode("latin-1")
+
+        pdf_data = buat_pdf(df_final)
+        st.download_button(
+            "📥 Download PDF",
+            data=pdf_data,
+            file_name="jurnal_umum.pdf",
+            mime="application/pdf",
+        )
+
     else:
         st.warning("Belum ada data valid di tabel.")
-
-# ================= TAB 2 =====================
-with tab2:
-    st.header("📚 Buku Besar (Otomatis dari Jurnal Umum)")
-
-    df = st.session_state.data.copy()
-    df = df.dropna(subset=["Ref"])
-    df = df[df["Ref"] != ""]
-
-    if not df.empty:
-        grouped = df.groupby("Ref")
-        for ref, group in grouped:
-            st.subheader(f"Nama Akun (Ref): {ref}")
-            st.write(style_excel(group).to_html(), unsafe_allow_html=True)
-
-            total_debit = group["Debit (Rp)"].sum()
-            total_kredit = group["Kredit (Rp)"].sum()
-            saldo = total_debit - total_kredit
-
-            col1, col2, col3 = st.columns(3)
-            col2.markdown(
-                f"<div style='text-align:center; font-weight:bold; background:#e0f7fa; padding:5px; border:1px solid black;'>"
-                f"Saldo Akhir: {format_rupiah(saldo)}</div>",
-                unsafe_allow_html=True
-            )
-    else:
-        st.info("Isi data terlebih dahulu di tab **Jurnal Umum**.")
