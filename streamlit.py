@@ -3,7 +3,6 @@ import pandas as pd
 from fpdf import FPDF
 import tempfile
 
-# === Konfigurasi Halaman ===
 st.set_page_config(page_title="Administrasi BUMDes", layout="wide")
 st.title("📘 Sistem Akuntansi BUMDes")
 
@@ -18,51 +17,34 @@ def format_rupiah(x):
     try:
         return f"Rp {x:,.0f}".replace(",", ".")
     except Exception:
-        return x  # fallback kalau kolom kosong / non-numeric
+        return x
 
-# === Fungsi Styling (kalau mau digunakan di masa depan) ===
-def style_excel(df):
-    return df.style.set_table_styles([
-        {"selector": "thead th",
-         "props": [("background-color", "#b7e1cd"),
-                   ("color", "black"),
-                   ("border", "1px solid black"),
-                   ("text-align", "center"),
-                   ("font-weight", "bold")]},
-        {"selector": "td",
-         "props": [("border", "1px solid black"),
-                   ("text-align", "center"),
-                   ("padding", "4px")]}
-    ]).format({"Debit (Rp)": format_rupiah, "Kredit (Rp)": format_rupiah})
-
-# === Navigasi Halaman ===
+# === TAB ===
 tab1, tab2 = st.tabs(["🧾 Jurnal Umum", "📚 Buku Besar"])
 
-# ================= TAB 1 =====================
 with tab1:
     st.header("🧾 Jurnal Umum")
+    st.info("✏️ Klik langsung di tabel untuk menambah atau mengubah data. Tekan Enter sekali lalu klik di luar sel untuk menyimpan otomatis.")
 
-    st.info("✏️ Klik langsung di tabel untuk menambah atau mengubah data. Tekan Enter sekali untuk menyimpan perubahan.")
-
-    # Editor Data Interaktif - realtime otomatis
+    # 🔁 Buat Data Editor
     edited_df = st.data_editor(
         st.session_state.data,
         num_rows="dynamic",
         use_container_width=True,
         key="editable_table",
-        disabled=False,
         column_config={
             "Tanggal": st.column_config.TextColumn("Tanggal (misal: 2025-01-01)"),
             "Keterangan": st.column_config.TextColumn("Keterangan"),
             "Ref": st.column_config.TextColumn("Ref (contoh: 101)"),
             "Debit (Rp)": st.column_config.NumberColumn("Debit (Rp)", step=1000, format="%d"),
             "Kredit (Rp)": st.column_config.NumberColumn("Kredit (Rp)", step=1000, format="%d"),
-        }
+        },
     )
 
-    # Update otomatis ke session_state
+    # 🧠 Deteksi perubahan dan simpan otomatis
     if not edited_df.equals(st.session_state.data):
         st.session_state.data = edited_df.copy()
+        st.toast("💾 Perubahan tersimpan otomatis!", icon="💾")
 
     # === Bersihkan Data Kosong ===
     df_clean = edited_df.dropna(subset=["Keterangan"], how="all")
@@ -123,7 +105,6 @@ with tab1:
     else:
         st.warning("Belum ada data valid di tabel.")
 
-# ================= TAB 2 =====================
 with tab2:
     st.header("📚 Buku Besar")
     st.info("Fitur ini sedang dalam pengembangan 🚧")
