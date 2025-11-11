@@ -34,26 +34,21 @@ def fmt_tgl(v):
         return v
 
 def style_table(df: pd.DataFrame, add_total: bool = True) -> pd.io.formats.style.Styler:
-    # Buat salinan untuk tampilan
     df_disp = df.copy()
+    df_disp.index = range(1, len(df_disp) + 1)  # penomoran mulai 1
 
-    # Nomori baris mulai 1 (untuk tampilan)
-    df_disp.index = range(1, len(df_disp) + 1)
-
-    # Tambahkan baris TOTAL (hanya untuk kolom yang ada)
     if add_total and not df_disp.empty:
         totals = {}
         for col in ["Debit", "Kredit"]:
             if col in df_disp.columns:
                 totals[col] = df_disp[col].sum()
         total_row = {c: "" for c in df_disp.columns}
-        total_row.update({"Keterangan": "TOTAL"})
+        # pastikan kolom Keterangan ada sebelum memberi label TOTAL
+        if "Keterangan" in total_row:
+            total_row["Keterangan"] = "TOTAL"
         total_row.update(totals)
-
-        # Append tanpa merusak penomoran index
         df_disp = pd.concat([df_disp, pd.DataFrame([total_row])], ignore_index=False)
 
-    # Siapkan peta format
     format_map = {}
     if "Tanggal" in df_disp.columns:
         format_map["Tanggal"] = fmt_tgl
@@ -61,8 +56,43 @@ def style_table(df: pd.DataFrame, add_total: bool = True) -> pd.io.formats.style
         if col in df_disp.columns:
             format_map[col] = "Rp {:,.0f}".format
 
-    styler = df_disp.style.format(format_map).set_properties(**{"text-align": "center"})
-    return styler
+    return df_disp.style.format(format_map).set_properties(**{"text-align": "center"})
+
+# === Helper form tambah transaksi (disamakan) ===
+def form_transaksi(form_key: str, akun_options=None):
+    """
+    Render form tambah transaksi dengan desain seragam.
+    - form_key: key unik untuk menghindari bentrok widget
+    - akun_options: list akun; jika None, dropdown akun tidak ditampilkan (untuk Jurnal Umum)
+    Return: dict {submitted, tgl, ket, tipe, jumlah, akun (opsional)}
+    """
+    with st.form(form_key):
+        c1, c2, c3 = st.columns([2, 2, 1])
+
+        with c1:
+            tgl = st.date_input("Tanggal", value=date.today(), key=f"{form_key}_tgl")
+            ket = st.text_input("Keterangan", placeholder="Deskripsi transaksi", key=f"{form_key}_ket")
+
+        with c2:
+            akun_val = None
+            if akun_options is not None:
+                akun_val = st.selectbox("Pilih Akun", akun_options, key=f"{form_key}_akun")
+            tipe = st.radio("Tipe", ["Debit", "Kredit"], horizontal=True, key=f"{form_key}_tipe")
+
+        with c3:
+            jumlah = st.number_input(
+                "Jumlah (Rp)", min_value=0.0, step=1000.0, format="%.0f", key=f"{form_key}_jml"
+            )
+            submitted = st.form_submit_button("Tambah Transaksi")
+
+    return {
+        "submitted": submitted,
+        "tgl": tgl,
+        "ket": ket,
+        "tipe": tipe,
+        "jumlah": jumlah,
+        "akun": akun_val,
+    }
 
 # === Tabs utama ===
 tab1, tab2 = st.tabs(["🧾 Jurnal Umum", "📚 Buku Besar"])
@@ -71,46 +101,34 @@ tab1, tab2 = st.tabs(["🧾 Jurnal Umum", "📚 Buku Besar"])
 #         JURNAL UMUM
 # =========================
 with tab1:
-    st.header("🧾 Jurnal Umum (Input Transaksi)")
+    st.header("🧾 Jurnal Umum")
+    st.subheader("Input Transaksi Baru")
 
     # Inisialisasi / migrasi struktur DataFrame jurnal
     jurnal_cols = ["Tanggal", "Keterangan", "Debit", "Kredit"]
     if "jurnal" not in st.session_state:
         st.session_state.jurnal = pd.DataFrame(columns=jurnal_cols)
     else:
-        # Migrasi: drop 'Ref' jika ada
         if "Ref" in st.session_state.jurnal.columns:
             st.session_state.jurnal = st.session_state.jurnal.drop(columns=["Ref"])
-        # Pastikan kolom lengkap & urut
         for c in jurnal_cols:
             if c not in st.session_state.jurnal.columns:
                 st.session_state.jurnal[c] = []
         st.session_state.jurnal = st.session_state.jurnal[jurnal_cols]
 
-    # Form input transaksi (tanpa 'Ref')
-    with st.form("form_input_jurnal"):
-        c1, c2, c3 = st.columns([2, 2, 1])
-        with c1:
-            tgl = st.date_input("Tanggal", value=date.today())
-            ket = st.text_input("Keterangan", placeholder="Deskripsi transaksi")
-        with c2:
-            tipe = st.radio("Tipe", ["Debit", "Kredit"], horizontal=True)
-        with c3:
-            jumlah = st.number_input("Jumlah (Rp)", min_value=0.0, step=1000.0, format="%.0f")
-            submit = st.form_submit_button("Tambah")
-
-    if submit:
-        if ket.strip() == "":
+    # Form transaksi (tanpa akun)
+    f = form_transaksi("form_input_jurnal", akun_options=None)
+    if f["submitted"]:
+        if f["ket"].strip() == "":
             st.error("Mohon isi kolom keterangan!")
-        elif jumlah <= 0:
+        elif f["jumlah"] <= 0:
             st.error("Jumlah harus lebih dari nol!")
         else:
-            debit = float(jumlah) if tipe == "Debit" else 0.0
-            kredit = float(jumlah) if tipe == "Kredit" else 0.0
-
+            debit = float(f["jumlah"]) if f["tipe"] == "Debit" else 0.0
+            kredit = float(f["jumlah"]) if f["tipe"] == "Kredit" else 0.0
             new_row = {
-                "Tanggal": tgl,
-                "Keterangan": ket.strip(),
+                "Tanggal": f["tgl"],
+                "Keterangan": f["ket"].strip(),
                 "Debit": debit,
                 "Kredit": kredit,
             }
@@ -118,7 +136,7 @@ with tab1:
                 [st.session_state.jurnal, pd.DataFrame([new_row])],
                 ignore_index=True
             )
-            st.success("Transaksi berhasil ditambahkan!")
+            st.success("Transaksi berhasil ditambahkan ke Jurnal Umum!")
 
     st.divider()
 
@@ -152,7 +170,6 @@ with tab1:
                 st.success("Semua baris jurnal berhasil dihapus!")
                 st.rerun()
     else:
-        # Tetap tampilkan tabel kosong agar konsisten
         st.subheader("Data Jurnal Umum")
         st.dataframe(style_table(df_jurnal, add_total=False), use_container_width=True)
         st.info("Belum ada data transaksi di Jurnal Umum.")
@@ -173,11 +190,9 @@ with tab2:
             "301 - Modal": pd.DataFrame(columns=akun_cols),
         }
     else:
-        # Migrasi data lama: drop 'Ref' jika ada di tiap akun
         for k, df in st.session_state.accounts.items():
             if "Ref" in df.columns:
                 st.session_state.accounts[k] = df.drop(columns=["Ref"])
-            # Pastikan kolom lengkap & berurutan
             for c in akun_cols:
                 if c not in st.session_state.accounts[k].columns:
                     st.session_state.accounts[k][c] = []
@@ -192,10 +207,8 @@ with tab2:
         for c in ["Debit", "Kredit"]:
             dfx[c] = pd.to_numeric(dfx[c], errors="coerce").fillna(0.0)
 
-        # Urutkan berdasarkan tanggal (stable sort)
         dfx = dfx.sort_values(["Tanggal"], kind="mergesort").reset_index(drop=True)
 
-        # Hitung saldo berjalan (Debit - Kredit)
         running = 0.0
         saldo_debit = []
         saldo_kredit = []
@@ -210,52 +223,43 @@ with tab2:
 
         dfx["Saldo Debit"] = saldo_debit
         dfx["Saldo Kredit"] = saldo_kredit
-
-        # Kembalikan tanggal ke date untuk tampilan
         dfx["Tanggal"] = dfx["Tanggal"].dt.date
         return dfx
 
-    # Form input transaksi baru ke Buku Besar (tanpa 'Ref')
+    # Form transaksi Buku Besar (desain sama, dengan dropdown Akun)
     st.subheader("Input Transaksi Baru")
-    with st.form("form_input_tb"):
-        c1, c2, c3 = st.columns([2, 1, 1])
-        with c1:
-            akun_pil = st.selectbox("Pilih Akun", list(st.session_state.accounts.keys()))
-            ket_bb = st.text_input("Keterangan", placeholder="contoh: Membeli peralatan")
-        with c2:
-            tgl_bb = st.date_input("Tanggal", value=date.today())
-        with c3:
-            tipe_bb = st.radio("Tipe", ["Debit", "Kredit"], horizontal=True, key="tipe_bb")
-            jumlah_bb = st.number_input("Jumlah (Rp)", min_value=0.0, step=1000.0, format="%.0f", key="jumlah_bb")
-        tambah = st.form_submit_button("Tambah Transaksi")
+    akun_list = list(st.session_state.accounts.keys())
+    fbb = form_transaksi("form_input_tb", akun_options=akun_list)
 
-    if tambah:
-        if ket_bb.strip() == "":
+    if fbb["submitted"]:
+        if fbb["ket"].strip() == "":
             st.error("Mohon isi kolom keterangan!")
-        elif jumlah_bb <= 0:
+        elif fbb["jumlah"] <= 0:
             st.error("Jumlah harus lebih dari nol!")
+        elif not fbb["akun"]:
+            st.error("Mohon pilih akun!")
         else:
-            debit = float(jumlah_bb) if tipe_bb == "Debit" else 0.0
-            kredit = float(jumlah_bb) if tipe_bb == "Kredit" else 0.0
+            debit = float(fbb["jumlah"]) if fbb["tipe"] == "Debit" else 0.0
+            kredit = float(fbb["jumlah"]) if fbb["tipe"] == "Kredit" else 0.0
             baris = pd.DataFrame({
-                "Tanggal": [tgl_bb],
-                "Keterangan": [ket_bb.strip()],
+                "Tanggal": [fbb["tgl"]],
+                "Keterangan": [fbb["ket"].strip()],
                 "Debit": [debit],
                 "Kredit": [kredit],
             })
-            st.session_state.accounts[akun_pil] = pd.concat(
-                [st.session_state.accounts[akun_pil], baris], ignore_index=True
+            st.session_state.accounts[fbb["akun"]] = pd.concat(
+                [st.session_state.accounts[fbb["akun"]], baris], ignore_index=True
             )
-            st.success(f"Transaksi berhasil ditambahkan di akun {akun_pil}!")
+            st.success(f"Transaksi berhasil ditambahkan di akun {fbb['akun']}!")
 
     st.divider()
 
     # Tampilkan tabel buku besar per akun dengan saldo berjalan, di Tabs
-    akun_list = list(st.session_state.accounts.keys())
     tabs_akun = st.tabs(akun_list)
-
     for i, akun in enumerate(akun_list):
         with tabs_akun[i]:
             st.markdown(f"Nama Akun : {akun.split(' - ',1)[1]}  \nNo Akun : {akun.split(' - ',1)[0]}")
             df = st.session_state.accounts[akun]
-            df
+            df_show = hitung_saldo(df) if not df.empty else df.copy()
+
+            st.dataframe(style_table(df_show, add_total=True), use_container_width=True)
