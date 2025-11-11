@@ -6,7 +6,7 @@ from datetime import date
 st.set_page_config(page_title="Administrasi BUMDes", layout="wide")
 st.title("📘 Sistem Akuntansi BUMDes")
 
-# === Styling agar mirip Streamlit ===
+# === Styling (opsional) ===
 st.markdown("""
 <style>
 .ag-theme-streamlit {
@@ -35,19 +35,28 @@ tab1, tab2 = st.tabs(["🧾 Jurnal Umum", "📚 Buku Besar"])
 with tab1:
     st.header("🧾 Jurnal Umum (Input Transaksi)")
 
-    # Inisialisasi DataFrame jurnal di session_state jika belum ada
+    # Inisialisasi / migrasi struktur DataFrame jurnal
+    jurnal_cols = ["Tanggal", "Keterangan", "Debit", "Kredit"]
     if "jurnal" not in st.session_state:
-        cols = ["Tanggal", "Keterangan", "Ref", "Debit", "Kredit"]
-        st.session_state.jurnal = pd.DataFrame(columns=cols)
+        st.session_state.jurnal = pd.DataFrame(columns=jurnal_cols)
+    else:
+        # Drop kolom 'Ref' jika masih ada (migrasi data lama)
+        if "Ref" in st.session_state.jurnal.columns:
+            st.session_state.jurnal = st.session_state.jurnal.drop(columns=["Ref"])
 
-    # Form input transaksi
+        # Pastikan urutan dan kelengkapan kolom sesuai
+        for c in jurnal_cols:
+            if c not in st.session_state.jurnal.columns:
+                st.session_state.jurnal[c] = []  # tambahkan kolom kosong
+        st.session_state.jurnal = st.session_state.jurnal[jurnal_cols]
+
+    # Form input transaksi (tanpa 'Ref')
     with st.form("form_input_jurnal"):
         c1, c2, c3 = st.columns([2, 2, 1])
         with c1:
             tgl = st.date_input("Tanggal", value=date.today())
             ket = st.text_input("Keterangan", placeholder="Deskripsi transaksi")
         with c2:
-            ref = st.text_input("Ref", placeholder="Mis. JU-1")
             tipe = st.radio("Tipe", ["Debit", "Kredit"], horizontal=True)
         with c3:
             jumlah = st.number_input("Jumlah (Rp)", min_value=0.0, step=1000.0, format="%.0f")
@@ -65,7 +74,6 @@ with tab1:
             new_row = {
                 "Tanggal": tgl,
                 "Keterangan": ket.strip(),
-                "Ref": ref.strip(),
                 "Debit": debit,
                 "Kredit": kredit,
             }
@@ -95,10 +103,10 @@ with tab1:
         total_row = pd.DataFrame({
             "Tanggal": [""],
             "Keterangan": ["TOTAL"],
-            "Ref": [""],
             "Debit": [total_debit],
             "Kredit": [total_kredit],
         })
+        # gunakan ignore_index=False agar index penomoran tidak berubah
         df_final = pd.concat([df_display, total_row], ignore_index=False)
 
         # Format tampilan
@@ -148,15 +156,25 @@ with tab1:
 with tab2:
     st.header("📚 Buku Besar")
 
-    # Inisialisasi akun dan data jika belum ada
+    # Inisialisasi akun dan data jika belum ada (tanpa 'Ref')
+    akun_cols = ["Tanggal", "Keterangan", "Debit", "Kredit"]
     if "accounts" not in st.session_state:
-        cols = ["Tanggal", "Keterangan", "Ref", "Debit", "Kredit"]
         st.session_state.accounts = {
-            "101 - Kas": pd.DataFrame(columns=cols),
-            "102 - Peralatan": pd.DataFrame(columns=cols),
-            "103 - Perlengkapan": pd.DataFrame(columns=cols),
-            "301 - Modal": pd.DataFrame(columns=cols),
+            "101 - Kas": pd.DataFrame(columns=akun_cols),
+            "102 - Peralatan": pd.DataFrame(columns=akun_cols),
+            "103 - Perlengkapan": pd.DataFrame(columns=akun_cols),
+            "301 - Modal": pd.DataFrame(columns=akun_cols),
         }
+    else:
+        # Migrasi data lama: drop 'Ref' jika ada di tiap akun
+        for k, df in st.session_state.accounts.items():
+            if "Ref" in df.columns:
+                st.session_state.accounts[k] = df.drop(columns=["Ref"])
+            # Pastikan kolom lengkap & berurutan
+            for c in akun_cols:
+                if c not in st.session_state.accounts[k].columns:
+                    st.session_state.accounts[k][c] = []
+            st.session_state.accounts[k] = st.session_state.accounts[k][akun_cols]
 
     # Fungsi hitung saldo berjalan
     def hitung_saldo(df: pd.DataFrame) -> pd.DataFrame:
@@ -190,7 +208,7 @@ with tab2:
         dfx["Tanggal"] = dfx["Tanggal"].dt.date
         return dfx
 
-    # Form input transaksi baru ke Buku Besar
+    # Form input transaksi baru ke Buku Besar (tanpa 'Ref')
     st.subheader("Input Transaksi Baru")
     with st.form("form_input_tb"):
         c1, c2, c3 = st.columns([2, 1, 1])
@@ -199,7 +217,6 @@ with tab2:
             ket_bb = st.text_input("Keterangan", placeholder="contoh: Membeli peralatan")
         with c2:
             tgl_bb = st.date_input("Tanggal", value=date.today())
-            ref_bb = st.text_input("Ref", value="JU-1")
         with c3:
             tipe_bb = st.radio("Tipe", ["Debit", "Kredit"], horizontal=True, key="tipe_bb")
             jumlah_bb = st.number_input("Jumlah (Rp)", min_value=0.0, step=1000.0, format="%.0f", key="jumlah_bb")
@@ -216,7 +233,6 @@ with tab2:
             baris = pd.DataFrame({
                 "Tanggal": [tgl_bb],
                 "Keterangan": [ket_bb.strip()],
-                "Ref": [ref_bb.strip()],
                 "Debit": [debit],
                 "Kredit": [kredit],
             })
@@ -237,7 +253,6 @@ with tab2:
             df = st.session_state.accounts[akun]
             df_show = hitung_saldo(df) if not df.empty else df.copy()
 
-            # Format tampilan saldo
             st.dataframe(
                 df_show.style.format({
                     "Debit": "Rp {:,.0f}".format,
