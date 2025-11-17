@@ -34,33 +34,35 @@ def fmt_tgl(v):
         return v
 
 def style_table(df: pd.DataFrame, add_total: bool = True):
-    # Salinan untuk tampilan
     df_disp = df.copy()
 
-    # Penomoran baris mulai 1
+    # Penomoran index
     df_disp.index = range(1, len(df_disp) + 1)
 
-    # Tambahkan baris TOTAL (untuk Debit & Kredit)
+    # Tambah baris TOTAL
     if add_total and not df_disp.empty:
-        totals = {}
-        for col in ["Debit", "Kredit"]:
-            if col in df_disp.columns:
-                totals[col] = df_disp[col].sum()
-        total_row = {c: "" for c in df_disp.columns}
-        if "Keterangan" in total_row:
-            total_row["Keterangan"] = "TOTAL"
-        total_row.update(totals)
-        df_disp = pd.concat([df_disp, pd.DataFrame([total_row])], ignore_index=False)
+        total_row = {}
+        for c in df_disp.columns:
+            if c == "Keterangan":
+                total_row[c] = "TOTAL"
+            elif c in ["Debit", "Kredit", "Saldo Debit", "Saldo Kredit"]:
+                total_row[c] = df_disp[c].sum()
+            else:
+                total_row[c] = None  # aman untuk streamlit
+        df_disp.loc[len(df_disp) + 1] = total_row
 
-    # Peta format
-    format_map = {}
+    # Format style
+    fmt = {}
+
     if "Tanggal" in df_disp.columns:
-        format_map["Tanggal"] = fmt_tgl
+        fmt["Tanggal"] = fmt_tgl
+
     for col in ["Debit", "Kredit", "Saldo Debit", "Saldo Kredit"]:
         if col in df_disp.columns:
-            format_map[col] = "Rp {:,.0f}".format
+            fmt[col] = lambda x: f"Rp {x:,.0f}" if pd.notnull(x) else ""
 
-    return df_disp.style.format(format_map).set_properties(**{"text-align": "center"})
+    return df_disp.style.format(fmt).set_properties(**{"text-align": "center"})
+
 
 # === Helper form tambah transaksi (seragam) ===
 def form_transaksi(form_key: str, akun_options=None):
