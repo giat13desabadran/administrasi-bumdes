@@ -300,3 +300,68 @@ def build_pdf_buku_besar_per_akun(akun: str, df: pd.DataFrame, org_name: str = "
     doc.build(story)
     buf.seek(0)
     return buf
+
+# === UI Aplikasi ===
+
+st.header("📒 Jurnal Umum")
+
+# Inisialisasi session state
+if "jurnal" not in st.session_state:
+    st.session_state.jurnal = pd.DataFrame(columns=["Tanggal", "Keterangan", "Debit", "Kredit"])
+
+# Form tambah transaksi
+form = form_transaksi("form_jurnal", akun_options=None)
+
+if form["submitted"]:
+    new_row = {
+        "Tanggal": form["tgl"],
+        "Keterangan": form["ket"],
+        "Debit": form["jumlah"] if form["tipe"] == "Debit" else 0,
+        "Kredit": form["jumlah"] if form["tipe"] == "Kredit" else 0,
+    }
+    st.session_state.jurnal = pd.concat(
+        [st.session_state.jurnal, pd.DataFrame([new_row])],
+        ignore_index=True
+    )
+    st.success("Transaksi berhasil ditambahkan!")
+
+# Tampilkan tabel jurnal umum
+if not st.session_state.jurnal.empty:
+    st.subheader("📄 Data Jurnal Umum")
+    st.dataframe(style_table(st.session_state.jurnal), use_container_width=True)
+
+    # Tombol download PDF
+    if _RPT_OK:
+        pdf = build_pdf_jurnal(st.session_state.jurnal)
+        st.download_button(
+            label="📥 Download PDF Jurnal",
+            data=pdf.getvalue(),
+            file_name="jurnal_umum.pdf",
+            mime="application/pdf",
+        )
+
+
+# === Buku Besar ===
+st.header("📚 Buku Besar")
+
+akun_list = sorted(list(set(st.session_state.jurnal["Keterangan"])))
+akun_pilih = st.selectbox("Pilih Akun", akun_list)
+
+if akun_pilih:
+    df_akun = st.session_state.jurnal[
+        st.session_state.jurnal["Keterangan"] == akun_pilih
+    ]
+
+    df_akun_saldo = hitung_saldo(df_akun)
+
+    st.dataframe(style_table(df_akun_saldo), use_container_width=True)
+
+    if _RPT_OK:
+        pdf = build_pdf_buku_besar_per_akun(akun_pilih, df_akun)
+        st.download_button(
+            label="📥 Download PDF Buku Besar",
+            data=pdf.getvalue(),
+            file_name=f"buku_besar_{akun_pilih}.pdf",
+            mime="application/pdf",
+        )
+
