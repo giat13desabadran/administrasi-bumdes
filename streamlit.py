@@ -1,10 +1,83 @@
 import streamlit as st
 import pandas as pd
 from datetime import date
+import json, os  # Persistensi
+
+# === Persistensi: Konfigurasi & fungsi simpan/muat ===
+DATA_FILE = "data_bumdes.json"
+AKUN_COLS = ["Tanggal", "Keterangan", "Debit", "Kredit"]
+
+def save_data():
+    """
+    Simpan Jurnal dan Buku Besar ke file JSON.
+    Panggil setiap selesai mengubah data.
+    """
+    data = {
+        "jurnal": st.session_state.get("jurnal", pd.DataFrame(columns=AKUN_COLS)).to_dict(orient="records"),
+        "accounts": {
+            k: df.to_dict(orient="records")
+            for k, df in st.session_state.get("accounts", {}).items()
+        }
+    }
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, default=str)  # default=str agar tipe tanggal aman
+
+def load_data() -> bool:
+    """
+    Muat data dari file JSON ke st.session_state.
+    Return True jika file ada & berhasil dimuat, else False.
+    """
+    if not os.path.exists(DATA_FILE):
+        return False
+
+    with open(DATA_FILE, "r", encoding="utf-8") as f:
+        raw = json.load(f)
+
+    # Muat Jurnal
+    j = pd.DataFrame(raw.get("jurnal", []))
+    for c in AKUN_COLS:
+        if c not in j.columns:
+            j[c] = []
+    if not j.empty and "Tanggal" in j.columns:
+        j["Tanggal"] = pd.to_datetime(j["Tanggal"], errors="coerce").dt.date
+    st.session_state.jurnal = j[AKUN_COLS]
+
+    # Muat Buku Besar
+    st.session_state.accounts = {}
+    for nama, recs in raw.get("accounts", {}).items():
+        df = pd.DataFrame(recs)
+        for c in AKUN_COLS:
+            if c not in df.columns:
+                df[c] = []
+        if not df.empty and "Tanggal" in df.columns:
+            df["Tanggal"] = pd.to_datetime(df["Tanggal"], errors="coerce").dt.date
+        st.session_state.accounts[nama] = df[AKUN_COLS]
+    return True
+
 
 # === Konfigurasi dasar ===
 st.set_page_config(page_title="Administrasi BUMDes", layout="wide")
 st.title("📘 Sistem Akuntansi BUMDes")
+
+# === Inisialisasi dari file (sekali saat app pertama jalan) ===
+if "initialized" not in st.session_state:
+    loaded = load_data()
+    if not loaded:
+        st.session_state.jurnal = pd.DataFrame(columns=AKUN_COLS)
+        st.session_state.accounts = {
+            "Kas": pd.DataFrame(columns=AKUN_COLS),
+            "Peralatan": pd.DataFrame(columns=AKUN_COLS),
+            "Perlengkapan": pd.DataFrame(columns=AKUN_COLS),
+            "Modal": pd.DataFrame(columns=AKUN_COLS),
+            "Pendapatan": pd.DataFrame(columns=AKUN_COLS),
+            "Beban sewa": pd.DataFrame(columns=AKUN_COLS),
+            "Beban BBM": pd.DataFrame(columns=AKUN_COLS),
+            "Beban gaji": pd.DataFrame(columns=AKUN_COLS),
+            "Beban listrik": pd.DataFrame(columns=AKUN_COLS),
+            "Beban perawatan": pd.DataFrame(columns=AKUN_COLS),
+            "Beban prive": pd.DataFrame(columns=AKUN_COLS),
+        }
+    st.session_state.initialized = True
 
 # === Styling (opsional) ===
 st.markdown("""
@@ -36,10 +109,10 @@ def fmt_tgl(v):
 def style_table(df: pd.DataFrame, add_total: bool = True):
     df_disp = df.copy()
 
-    # Penomoran index
+    # Penomoran index tampil (1..n)
     df_disp.index = range(1, len(df_disp) + 1)
 
-    # Tambah baris TOTAL
+    # Tambah baris TOTAL (hanya untuk tampilan)
     if add_total and not df_disp.empty:
         total_row = {}
         for c in df_disp.columns:
@@ -48,29 +121,24 @@ def style_table(df: pd.DataFrame, add_total: bool = True):
             elif c in ["Debit", "Kredit", "Saldo Debit", "Saldo Kredit"]:
                 total_row[c] = df_disp[c].sum()
             else:
-                total_row[c] = None  # aman untuk streamlit
+                total_row[c] = None
         df_disp.loc[len(df_disp) + 1] = total_row
 
     # Format style
     fmt = {}
-
     if "Tanggal" in df_disp.columns:
         fmt["Tanggal"] = fmt_tgl
-
     for col in ["Debit", "Kredit", "Saldo Debit", "Saldo Kredit"]:
         if col in df_disp.columns:
             fmt[col] = lambda x: f"Rp {x:,.0f}" if pd.notnull(x) else ""
 
     return df_disp.style.format(fmt).set_properties(**{"text-align": "center"})
 
-
 # === Helper form tambah transaksi (seragam) ===
 def form_transaksi(form_key: str, akun_options=None):
     """
     Render form tambah transaksi dengan desain seragam.
-    - form_key: key unik untuk hindari bentrok widget
-    - akun_options: list akun; jika None, dropdown akun disembunyikan (untuk Jurnal Umum)
-    Return: dict {submitted, tgl, ket, tipe, jumlah, akun (opsional)}
+    - akun_options None => tanpa dropdown akun (untuk Jurnal Umum)
     """
     with st.form(form_key):
         c1, c2, c3 = st.columns([2, 2, 1])
@@ -81,7 +149,7 @@ def form_transaksi(form_key: str, akun_options=None):
 
         with c2:
             akun_val = None
-            if akun_options is not None:
+            if akun_options is not None and len(akun_options) > 0:
                 akun_val = st.selectbox("Pilih Akun", akun_options, key=f"{form_key}_akun")
             tipe = st.radio("Tipe", ["Debit", "Kredit"], horizontal=True, key=f"{form_key}_tipe")
 
@@ -91,14 +159,7 @@ def form_transaksi(form_key: str, akun_options=None):
             )
             submitted = st.form_submit_button("Tambah Transaksi")
 
-    return {
-        "submitted": submitted,
-        "tgl": tgl,
-        "ket": ket,
-        "tipe": tipe,
-        "jumlah": jumlah,
-        "akun": akun_val,
-    }
+    return {"submitted": submitted, "tgl": tgl, "ket": ket, "tipe": tipe, "jumlah": jumlah, "akun": akun_val}
 
 # === Tabs utama ===
 tab1, tab2 = st.tabs(["🧾 Jurnal Umum", "📚 Buku Besar"])
@@ -110,8 +171,8 @@ with tab1:
     st.header("🧾 Jurnal Umum")
     st.subheader("Input Transaksi Baru")
 
-    # Inisialisasi / migrasi struktur DataFrame jurnal (tanpa Ref)
-    jurnal_cols = ["Tanggal", "Keterangan", "Debit", "Kredit"]
+    # Migrasi struktur DataFrame jurnal (jaga konsistensi kolom)
+    jurnal_cols = AKUN_COLS
     if "jurnal" not in st.session_state:
         st.session_state.jurnal = pd.DataFrame(columns=jurnal_cols)
     else:
@@ -142,6 +203,7 @@ with tab1:
                 [st.session_state.jurnal, pd.DataFrame([new_row])],
                 ignore_index=True
             )
+            save_data()  # simpan setelah tambah
             st.success("Transaksi berhasil ditambahkan ke Jurnal Umum!")
 
     st.divider()
@@ -168,11 +230,13 @@ with tab1:
                 st.session_state.jurnal = st.session_state.jurnal.drop(
                     st.session_state.jurnal.index[int(del_idx) - 1]
                 ).reset_index(drop=True)
+                save_data()  # simpan setelah hapus
                 st.success(f"Baris {int(del_idx)} berhasil dihapus!")
                 st.rerun()
         with cdel3:
             if st.button("Hapus Semua"):
                 st.session_state.jurnal = st.session_state.jurnal.iloc[0:0].copy()
+                save_data()  # simpan setelah hapus semua
                 st.success("Semua baris jurnal berhasil dihapus!")
                 st.rerun()
     else:
@@ -186,96 +250,29 @@ with tab1:
 with tab2:
     st.header("📚 Buku Besar")
 
-    # Inisialisasi akun dan data jika belum ada (tanpa 'Ref')
-    akun_cols = ["Tanggal", "Keterangan", "Debit", "Kredit"]
+    # Inisialisasi/migrasi akun (drop 'Ref' jika ada)
     if "accounts" not in st.session_state:
-        st.session_state.accounts = {
-            "Kas": pd.DataFrame(columns=akun_cols),
-            "Peralatan": pd.DataFrame(columns=akun_cols),
-            "Perlengkapan": pd.DataFrame(columns=akun_cols),
-            "Modal": pd.DataFrame(columns=akun_cols),
-            "Pendapatan": pd.DataFrame(columns=akun_cols),
-            "Beban sewa": pd.DataFrame(columns=akun_cols),
-            "Beban BBM": pd.DataFrame(columns=akun_cols),
-            "Beban gaji": pd.DataFrame(columns=akun_cols),
-            "Beban listrik": pd.DataFrame(columns=akun_cols),
-            "Beban perawatan": pd.DataFrame(columns=akun_cols),
-            "Beban prive": pd.DataFrame(columns=akun_cols)
-        }
-    else:
-        for k, df in st.session_state.accounts.items():
-            if "Ref" in df.columns:
-                st.session_state.accounts[k] = df.drop(columns=["Ref"])
-            for c in akun_cols:
-                if c not in st.session_state.accounts[k].columns:
-                    st.session_state.accounts[k][c] = []
-            st.session_state.accounts[k] = st.session_state.accounts[k][akun_cols]
+        st.session_state.accounts = {}
+    for k, df in list(st.session_state.accounts.items()):
+        if "Ref" in df.columns:
+            st.session_state.accounts[k] = df.drop(columns=["Ref"])
+        for c in AKUN_COLS:
+            if c not in st.session_state.accounts[k].columns:
+                st.session_state.accounts[k][c] = []
+        st.session_state.accounts[k] = st.session_state.accounts[k][AKUN_COLS]
 
-    # Fungsi hitung saldo berjalan
-    def hitung_saldo(df: pd.DataFrame) -> pd.DataFrame:
-        if df.empty:
-            return df.copy()
-        dfx = df.copy()
-        dfx["Tanggal"] = pd.to_datetime(dfx["Tanggal"], errors='coerce')
-        for c in ["Debit", "Kredit"]:
-            dfx[c] = pd.to_numeric(dfx[c], errors="coerce").fillna(0.0)
+    # Kelola Akun (opsional: tambah/ubah/hapus akun)
+    with st.expander("⚙️ Kelola Akun Buku Besar"):
+        def _sanitize_name(n: str) -> str:
+            return " ".join((n or "").split()).strip()
 
-        # Urutkan tanggal stabil
-        dfx = dfx.sort_values(["Tanggal"], kind="mergesort").reset_index(drop=True)
-
-        # Running balance (Debit - Kredit)
-        running = 0.0
-        saldo_debit = []
-        saldo_kredit = []
-        for _, r in dfx.iterrows():
-            running += float(r["Debit"]) - float(r["Kredit"])
-            if running >= 0:
-                saldo_debit.append(running)
-                saldo_kredit.append(0.0)
-            else:
-                saldo_debit.append(0.0)
-                saldo_kredit.append(abs(running))
-
-        dfx["Saldo Debit"] = saldo_debit
-        dfx["Saldo Kredit"] = saldo_kredit
-        dfx["Tanggal"] = dfx["Tanggal"].dt.date
-        return dfx
-
-    # Form transaksi Buku Besar (desain sama, dengan dropdown Akun)
-    st.subheader("Input Transaksi Baru")
-    akun_list = list(st.session_state.accounts.keys())
-    fbb = form_transaksi("form_input_tb", akun_options=akun_list)
-
-    if fbb["submitted"]:
-        if fbb["ket"].strip() == "":
-            st.error("Mohon isi kolom keterangan!")
-        elif fbb["jumlah"] <= 0:
-            st.error("Jumlah harus lebih dari nol!")
-        elif not fbb["akun"]:
-            st.error("Mohon pilih akun!")
-        else:
-            debit = float(fbb["jumlah"]) if fbb["tipe"] == "Debit" else 0.0
-            kredit = float(fbb["jumlah"]) if fbb["tipe"] == "Kredit" else 0.0
-            baris = pd.DataFrame({
-                "Tanggal": [fbb["tgl"]],
-                "Keterangan": [fbb["ket"].strip()],
-                "Debit": [debit],
-                "Kredit": [kredit],
-            })
-            st.session_state.accounts[fbb["akun"]] = pd.concat(
-                [st.session_state.accounts[fbb["akun"]], baris], ignore_index=True
-            )
-            st.success(f"Transaksi berhasil ditambahkan di akun {fbb['akun']}!")
-
-    st.divider()
-
-    # Tampilkan tabel buku besar per akun dengan saldo berjalan, di Tabs
-    tabs_akun = st.tabs(akun_list)
-    for i, akun in enumerate(akun_list):
-        with tabs_akun[i]:
-            st.markdown(f"Nama Akun : {akun}  \n")
-            df = st.session_state.accounts[akun]
-            df_show = hitung_saldo(df) if not df.empty else df.copy()
-            st.dataframe(style_table(df_show, add_total=True), use_container_width=True)
-
-
+        c1, c2 = st.columns([3, 1])
+        with c1:
+            akun_baru = st.text_input("Nama akun baru", placeholder="contoh: Piutang Usaha", key="akun_baru")
+        with c2:
+            if st.button("Tambah Akun"):
+                nama = _sanitize_name(akun_baru)
+                if not nama:
+                    st.warning("Nama akun tidak boleh kosong.")
+                elif any(nama.lower() == k.lower() for k in st.session_state.accounts.keys()):
+                   
