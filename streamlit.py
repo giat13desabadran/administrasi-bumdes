@@ -282,5 +282,12 @@ with c2:
                     "Download PDF",
                     data=pdf_bytes,
                     file_name=f"jurnal_umum_{tahun}_{bulan:02d}.pdf",
-                    mime="application/pdf"
+                    mime="application/pdf",
+                    use_container_width=True
                 )
+            except Exception as e:
+                st.error(f"Gagal membuat PDF: {e}")
+        else:
+            st.info("Fitur PDF membutuhkan fpdf2. Install: pip install fpdf2")
+    else:
+        st.info("Tidak ada data pada periode ini.")
