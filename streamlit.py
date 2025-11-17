@@ -85,7 +85,7 @@ def style_table(df: pd.DataFrame, add_total: bool = True):
 
     return df_disp.style.format(format_map).set_properties(**{"text-align": "center"})
 
-# === Form seragam (jika Anda butuh untuk modul lain) ===
+# === Helper form tambah transaksi (seragam) ===
 def form_transaksi(form_key: str, akun_options=None):
     """
     Render form tambah transaksi dengan desain seragam.
@@ -152,11 +152,10 @@ def filter_periode(df: pd.DataFrame, start: date, end: date) -> pd.DataFrame:
     mask = (dfx["Tanggal"] >= start) & (dfx["Tanggal"] <= end)
     return dfx.loc[mask].copy()
 
-# === Hitung saldo berjalan (sederhana) ===
+# === Hitung saldo berjalan (all-time) ===
 def hitung_saldo(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Tambah kolom Saldo (Debit-Kredit) dan Saldo Berjalan (cumsum).
-    Tidak wajib dipakai di Jurnal Umum, tapi melengkapi stub yang terpotong.
+    Tambahkan kolom Saldo (Debit - Kredit) dan Saldo Berjalan (cumsum).
     """
     if df.empty or not {"Debit", "Kredit"}.issubset(df.columns):
         return df.copy()
@@ -167,7 +166,7 @@ def hitung_saldo(df: pd.DataFrame) -> pd.DataFrame:
     dfx["Saldo Berjalan"] = dfx["Saldo"].cumsum()
     return dfx
 
-# === Fungsi PDF ===
+# === Fungsi PDF (adaptasi dari kode teman) ===
 def buat_pdf(df: pd.DataFrame, judul: str = "Jurnal Umum BUMDes", periode: str = "") -> bytes:
     """
     Generate PDF dari DataFrame dengan header judul dan periode.
@@ -186,26 +185,23 @@ def buat_pdf(df: pd.DataFrame, judul: str = "Jurnal Umum BUMDes", periode: str =
         pdf.cell(0, 8, txt=f"Periode: {periode}", ln=True, align="C")
     pdf.ln(5)
 
-    # Siapkan kolom dan lebar
+    # Tabel header
     cols = list(df.columns)
-    page_width = 190  # lebar efektif A4 (210 - margin kiri/kanan 10)
+    page_width = 190  # lebar efektif A4 (210 - 2*10 margin)
     col_width = page_width / max(len(cols), 1)
 
-    # Header tabel
     pdf.set_font("Arial", size=11)
     for col in cols:
         pdf.cell(col_width, 9, str(col), border=1, align="C")
     pdf.ln()
 
-    # Isi tabel
+    # Tabel isi
     pdf.set_font("Arial", size=10)
     for _, row in df.iterrows():
         for col in cols:
-            val = row[col]
-            pdf.cell(col_width, 8, str(val), border=1, align="C")
+            pdf.cell(col_width, 8, str(row[col]), border=1, align="C")
         pdf.ln()
 
-    # Tulis ke file sementara lalu baca bytes
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
         pdf.output(tmp.name)
         tmp.seek(0)
@@ -216,6 +212,74 @@ def buat_pdf(df: pd.DataFrame, judul: str = "Jurnal Umum BUMDes", periode: str =
 # =========================
 st.header("🧾 Jurnal Umum")
 
-# Siapkan storage session untuk Jurnal
+# 1) Inisialisasi storage session (perbaikan KeyError)
 if "df_jurnal" not in st.session_state:
-    st.session_state["df_jurnal"]
+    st.session_state["df_jurnal"] = pd.DataFrame(
+        columns=["Tanggal", "Keterangan", "Debit", "Kredit"]
+    )
+
+# 2) Form tambah transaksi
+with st.expander("Tambah Transaksi"):
+    res = form_transaksi("form_jurnal", akun_options=None)
+    if res["submitted"]:
+        if not res["ket"]:
+            st.warning("Keterangan wajib diisi.")
+        else:
+            debit = float(res["jumlah"]) if res["tipe"] == "Debit" else 0.0
+            kredit = float(res["jumlah"]) if res["tipe"] == "Kredit" else 0.0
+            new_row = pd.DataFrame([{
+                "Tanggal": pd.to_datetime(res["tgl"]).date(),
+                "Keterangan": res["ket"],
+                "Debit": debit,
+                "Kredit": kredit
+            }])
+            st.session_state["df_jurnal"] = pd.concat(
+                [st.session_state["df_jurnal"], new_row], ignore_index=True
+            )
+            st.success("Transaksi ditambahkan.")
+
+# 3) Pilih periode (bulan-tahun)
+start, end, periode_text, tahun, bulan = pilih_periode("jurnal")
+
+# 4) Filter data sesuai periode & urutkan tanggal
+df_show = filter_periode(st.session_state["df_jurnal"], start, end)
+if not df_show.empty:
+    df_show = df_show.sort_values(by="Tanggal")
+
+# 5) Tabel tampilan dengan total
+st.subheader(f"Daftar Transaksi - {periode_text}")
+st.dataframe(style_table(df_show), use_container_width=True)
+
+# 6) Tombol unduh: CSV & PDF
+c1, c2 = st.columns(2)
+
+with c1:
+    csv_bytes = df_show.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        "Download CSV",
+        data=csv_bytes,
+        file_name=f"jurnal_umum_{tahun}_{bulan:02d}.csv",
+        mime="text/csv",
+        use_container_width=True
+    )
+
+with c2:
+    if not df_show.empty:
+        if FPDF_AVAILABLE:
+            # Siapkan DataFrame untuk PDF: format tanggal & rupiah
+            df_pdf = df_show.copy()
+            df_pdf["Tanggal"] = df_pdf["Tanggal"].apply(fmt_tgl)
+            df_pdf["Debit"] = pd.to_numeric(df_pdf["Debit"], errors="coerce").fillna(0).map(
+                lambda x: f"Rp {x:,.0f}".replace(",", ".")
+            )
+            df_pdf["Kredit"] = pd.to_numeric(df_pdf["Kredit"], errors="coerce").fillna(0).map(
+                lambda x: f"Rp {x:,.0f}".replace(",", ".")
+            )
+
+            try:
+                pdf_bytes = buat_pdf(df_pdf, judul="Jurnal Umum BUMDes", periode=periode_text)
+                st.download_button(
+                    "Download PDF",
+                    data=pdf_bytes,
+                    file_name=f"jurnal_umum_{tahun}_{bulan:02d}.pdf",
+                    mime="application
