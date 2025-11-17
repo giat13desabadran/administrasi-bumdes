@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import date
 import calendar
+import tempfile
 
 # PDF (fpdf2)
 try:
@@ -84,7 +85,7 @@ def style_table(df: pd.DataFrame, add_total: bool = True):
 
     return df_disp.style.format(format_map).set_properties(**{"text-align": "center"})
 
-# === Helper form tambah transaksi (seragam) ===
+# === Form seragam (jika Anda butuh untuk modul lain) ===
 def form_transaksi(form_key: str, akun_options=None):
     """
     Render form tambah transaksi dengan desain seragam.
@@ -151,5 +152,70 @@ def filter_periode(df: pd.DataFrame, start: date, end: date) -> pd.DataFrame:
     mask = (dfx["Tanggal"] >= start) & (dfx["Tanggal"] <= end)
     return dfx.loc[mask].copy()
 
-# === Hitung saldo berjalan (all-time) ===
-def hitung_saldo(df: pd.DataFrame)
+# === Hitung saldo berjalan (sederhana) ===
+def hitung_saldo(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Tambah kolom Saldo (Debit-Kredit) dan Saldo Berjalan (cumsum).
+    Tidak wajib dipakai di Jurnal Umum, tapi melengkapi stub yang terpotong.
+    """
+    if df.empty or not {"Debit", "Kredit"}.issubset(df.columns):
+        return df.copy()
+    dfx = df.copy()
+    dfx["Debit"] = pd.to_numeric(dfx["Debit"], errors="coerce").fillna(0.0)
+    dfx["Kredit"] = pd.to_numeric(dfx["Kredit"], errors="coerce").fillna(0.0)
+    dfx["Saldo"] = dfx["Debit"] - dfx["Kredit"]
+    dfx["Saldo Berjalan"] = dfx["Saldo"].cumsum()
+    return dfx
+
+# === Fungsi PDF ===
+def buat_pdf(df: pd.DataFrame, judul: str = "Jurnal Umum BUMDes", periode: str = "") -> bytes:
+    """
+    Generate PDF dari DataFrame dengan header judul dan periode.
+    Return: bytes siap diumpankan ke st.download_button
+    """
+    if not FPDF_AVAILABLE:
+        raise RuntimeError("fpdf2 belum terpasang. Install dengan: pip install fpdf2")
+
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    pdf.set_font("Arial", size=14)
+    pdf.cell(0, 10, txt=judul, ln=True, align="C")
+    if periode:
+        pdf.set_font("Arial", size=11)
+        pdf.cell(0, 8, txt=f"Periode: {periode}", ln=True, align="C")
+    pdf.ln(5)
+
+    # Siapkan kolom dan lebar
+    cols = list(df.columns)
+    page_width = 190  # lebar efektif A4 (210 - margin kiri/kanan 10)
+    col_width = page_width / max(len(cols), 1)
+
+    # Header tabel
+    pdf.set_font("Arial", size=11)
+    for col in cols:
+        pdf.cell(col_width, 9, str(col), border=1, align="C")
+    pdf.ln()
+
+    # Isi tabel
+    pdf.set_font("Arial", size=10)
+    for _, row in df.iterrows():
+        for col in cols:
+            val = row[col]
+            pdf.cell(col_width, 8, str(val), border=1, align="C")
+        pdf.ln()
+
+    # Tulis ke file sementara lalu baca bytes
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        pdf.output(tmp.name)
+        tmp.seek(0)
+        return tmp.read()
+
+# =========================
+# Halaman: Jurnal Umum
+# =========================
+st.header("🧾 Jurnal Umum")
+
+# Siapkan storage session untuk Jurnal
+if "df_jurnal" not in st.session_state:
+    st.session_state["df_jurnal"]
