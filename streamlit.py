@@ -1,6 +1,15 @@
 import streamlit as st
 import pandas as pd
 from datetime import date
+import calendar
+import tempfile
+
+# PDF
+try:
+    from fpdf import FPDF  # pip install fpdf2
+    FPDF_AVAILABLE = True
+except Exception:
+    FPDF_AVAILABLE = False
 
 # === Konfigurasi dasar ===
 st.set_page_config(page_title="Administrasi BUMDes", layout="wide")
@@ -26,6 +35,12 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# === Nama bulan Indonesia ===
+MONTH_NAMES_ID = [
+    None, "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+    "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+]
+
 # === Helper formatting ===
 def fmt_tgl(v):
     try:
@@ -33,26 +48,29 @@ def fmt_tgl(v):
     except Exception:
         return v
 
-def style_table(df: pd.DataFrame, add_total: bool = True):
-    # Salinan untuk tampilan
-    df_disp = df.copy()
+def format_rupiah(x):
+    try:
+        if x < 0:
+            return f"({abs(x):,.0f})".replace(",", ".")
+        return f"{x:,.0f}".replace(",", ".")
+    except Exception:
+        return x
 
-    # Penomoran baris mulai 1
+def style_table(df: pd.DataFrame, add_total: bool = True):
+    df_disp = df.copy()
     df_disp.index = range(1, len(df_disp) + 1)
 
-    # Tambahkan baris TOTAL (untuk Debit & Kredit)
     if add_total and not df_disp.empty:
         totals = {}
         for col in ["Debit", "Kredit"]:
             if col in df_disp.columns:
-                totals[col] = df_disp[col].sum()
+                totals[col] = pd.to_numeric(df_disp[col], errors="coerce").fillna(0.0).sum()
         total_row = {c: "" for c in df_disp.columns}
         if "Keterangan" in total_row:
             total_row["Keterangan"] = "TOTAL"
         total_row.update(totals)
         df_disp = pd.concat([df_disp, pd.DataFrame([total_row])], ignore_index=False)
 
-    # Peta format
     format_map = {}
     if "Tanggal" in df_disp.columns:
         format_map["Tanggal"] = fmt_tgl
@@ -98,180 +116,170 @@ def form_transaksi(form_key: str, akun_options=None):
         "akun": akun_val,
     }
 
-# === Tabs utama ===
-tab1, tab2 = st.tabs(["🧾 Jurnal Umum", "📚 Buku Besar"])
+# === Periode helper ===
+def pilih_periode(prefix: str):
+    c1, c2 = st.columns(2)
+    with c1:
+        tahun = st.number_input(
+            "Tahun",
+            min_value=2000, max_value=2100,
+            value=date.today().year, step=1,
+            key=f"{prefix}_tahun"
+        )
+    with c2:
+        bulan = st.selectbox(
+            "Bulan",
+            options=list(range(1, 13)),
+            index=date.today().month - 1,
+            format_func=lambda m: MONTH_NAMES_ID[m],
+            key=f"{prefix}_bulan"
+        )
+    start = date(int(tahun), int(bulan), 1)
+    end = date(int(tahun), int(bulan), calendar.monthrange(int(tahun), int(bulan))[1])
+    period_text = f"{MONTH_NAMES_ID[bulan]} {tahun}"
+    return start, end, period_text, int(tahun), int(bulan)
 
-# =========================
-#         JURNAL UMUM
-# =========================
-with tab1:
-    st.header("🧾 Jurnal Umum")
-    st.subheader("Input Transaksi Baru")
+def filter_periode(df: pd.DataFrame, start: date, end: date) -> pd.DataFrame:
+    if df.empty:
+        return df.copy()
+    dfx = df.copy()
+    dfx["Tanggal"] = pd.to_datetime(dfx["Tanggal"], errors="coerce").dt.date
+    mask = (dfx["Tanggal"] >= start) & (dfx["Tanggal"] <= end)
+    return dfx.loc[mask].copy()
 
-    # Inisialisasi / migrasi struktur DataFrame jurnal (tanpa Ref)
-    jurnal_cols = ["Tanggal", "Keterangan", "Debit", "Kredit"]
-    if "jurnal" not in st.session_state:
-        st.session_state.jurnal = pd.DataFrame(columns=jurnal_cols)
-    else:
-        if "Ref" in st.session_state.jurnal.columns:
-            st.session_state.jurnal = st.session_state.jurnal.drop(columns=["Ref"])
-        for c in jurnal_cols:
-            if c not in st.session_state.jurnal.columns:
-                st.session_state.jurnal[c] = []
-        st.session_state.jurnal = st.session_state.jurnal[jurnal_cols]
+# === Hitung saldo berjalan (all-time) ===
+def hitung_saldo(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df.copy()
+    dfx = df.copy()
+    dfx["Tanggal"] = pd.to_datetime(dfx["Tanggal"], errors='coerce')
+    for c in ["Debit", "Kredit"]:
+        dfx[c] = pd.to_numeric(dfx[c], errors="coerce").fillna(0.0)
 
-    # Form transaksi Jurnal (tanpa akun)
-    f = form_transaksi("form_input_jurnal", akun_options=None)
-    if f["submitted"]:
-        if f["ket"].strip() == "":
-            st.error("Mohon isi kolom keterangan!")
-        elif f["jumlah"] <= 0:
-            st.error("Jumlah harus lebih dari nol!")
+    dfx = dfx.sort_values(["Tanggal"], kind="mergesort").reset_index(drop=True)
+
+    running = 0.0
+    saldo_debit = []
+    saldo_kredit = []
+    for _, r in dfx.iterrows():
+        running += float(r["Debit"]) - float(r["Kredit"])
+        if running >= 0:
+            saldo_debit.append(running)
+            saldo_kredit.append(0.0)
         else:
-            debit = float(f["jumlah"]) if f["tipe"] == "Debit" else 0.0
-            kredit = float(f["jumlah"]) if f["tipe"] == "Kredit" else 0.0
-            new_row = {
-                "Tanggal": f["tgl"],
-                "Keterangan": f["ket"].strip(),
-                "Debit": debit,
-                "Kredit": kredit,
-            }
-            st.session_state.jurnal = pd.concat(
-                [st.session_state.jurnal, pd.DataFrame([new_row])],
-                ignore_index=True
-            )
-            st.success("Transaksi berhasil ditambahkan ke Jurnal Umum!")
+            saldo_debit.append(0.0)
+            saldo_kredit.append(abs(running))
 
-    st.divider()
+    dfx["Saldo Debit"] = saldo_debit
+    dfx["Saldo Kredit"] = saldo_kredit
+    dfx["Tanggal"] = dfx["Tanggal"].dt.date
+    return dfx
 
-    # Tabel Jurnal + aksi hapus
-    df_jurnal = st.session_state.jurnal.copy()
+# === Ledger per periode + Saldo Awal ===
+def ledger_periode_with_opening(df: pd.DataFrame, start: date, end: date) -> pd.DataFrame:
+    if df.empty:
+        return pd.DataFrame([{
+            "Tanggal": start,
+            "Keterangan": "Saldo Awal",
+            "Debit": 0.0,
+            "Kredit": 0.0,
+            "Saldo Debit": 0.0,
+            "Saldo Kredit": 0.0
+        }])
 
-    if not df_jurnal.empty:
-        st.subheader("Data Jurnal Umum")
-        st.dataframe(style_table(df_jurnal, add_total=True), use_container_width=True)
+    dfx = df.copy()
+    dfx["Tanggal"] = pd.to_datetime(dfx["Tanggal"], errors='coerce')
+    for c in ["Debit", "Kredit"]:
+        dfx[c] = pd.to_numeric(dfx[c], errors="coerce").fillna(0.0)
 
-        cdel1, cdel2, cdel3 = st.columns([2, 1, 1])
-        with cdel1:
-            del_idx = st.number_input(
-                "Hapus baris nomor",
-                min_value=1,
-                max_value=len(df_jurnal),
-                step=1,
-                value=1,
-                help="Pilih nomor baris (bukan baris TOTAL)"
-            )
-        with cdel2:
-            if st.button("Hapus Baris"):
-                st.session_state.jurnal = st.session_state.jurnal.drop(
-                    st.session_state.jurnal.index[int(del_idx) - 1]
-                ).reset_index(drop=True)
-                st.success(f"Baris {int(del_idx)} berhasil dihapus!")
-                st.rerun()
-        with cdel3:
-            if st.button("Hapus Semua"):
-                st.session_state.jurnal = st.session_state.jurnal.iloc[0:0].copy()
-                st.success("Semua baris jurnal berhasil dihapus!")
-                st.rerun()
+    opening = dfx.loc[dfx["Tanggal"] < pd.to_datetime(start), "Debit"].sum() - \
+              dfx.loc[dfx["Tanggal"] < pd.to_datetime(start), "Kredit"].sum()
+
+    within = dfx[(dfx["Tanggal"] >= pd.to_datetime(start)) & (dfx["Tanggal"] <= pd.to_datetime(end))]
+    within = within.sort_values(["Tanggal"], kind="mergesort").reset_index(drop=True)
+
+    running = opening
+    saldo_debit = []
+    saldo_kredit = []
+    for _, r in within.iterrows():
+        running += float(r["Debit"]) - float(r["Kredit"])
+        if running >= 0:
+            saldo_debit.append(running)
+            saldo_kredit.append(0.0)
+        else:
+            saldo_debit.append(0.0)
+            saldo_kredit.append(abs(running))
+
+    within["Saldo Debit"] = saldo_debit
+    within["Saldo Kredit"] = saldo_kredit
+    within["Tanggal"] = within["Tanggal"].dt.date
+
+    opening_row = {
+        "Tanggal": start,
+        "Keterangan": "Saldo Awal",
+        "Debit": 0.0,
+        "Kredit": 0.0,
+        "Saldo Debit": opening if opening >= 0 else 0.0,
+        "Saldo Kredit": abs(opening) if opening < 0 else 0.0
+    }
+
+    if within.empty:
+        return pd.DataFrame([opening_row])
     else:
-        st.subheader("Data Jurnal Umum")
-        st.dataframe(style_table(df_jurnal, add_total=False), use_container_width=True)
-        st.info("Belum ada data transaksi di Jurnal Umum.")
+        return pd.concat([pd.DataFrame([opening_row]), within], ignore_index=True)
 
-# =========================
-#        BUKU BESAR
-# =========================
-with tab2:
-    st.header("📚 Buku Besar")
+# === PDF helpers ===
+def truncate_to_width(pdf: FPDF, text: str, max_width: float):
+    text = str(text)
+    if pdf.get_string_width(text) <= max_width:
+        return text
+    while pdf.get_string_width(text + "...") > max_width and len(text) > 0:
+        text = text[:-1]
+    return text + "..."
 
-    # Inisialisasi akun dan data jika belum ada (tanpa 'Ref')
-    akun_cols = ["Tanggal", "Keterangan", "Debit", "Kredit"]
-    if "accounts" not in st.session_state:
-        st.session_state.accounts = {
-            "Kas": pd.DataFrame(columns=akun_cols),
-            "Peralatan": pd.DataFrame(columns=akun_cols),
-            "Perlengkapan": pd.DataFrame(columns=akun_cols),
-            "Modal": pd.DataFrame(columns=akun_cols),
-            "Pendapatan": pd.DataFrame(columns=akun_cols),
-            "Beban sewa": pd.DataFrame(columns=akun_cols),
-            "Beban BBM": pd.DataFrame(columns=akun_cols),
-            "Beban gaji": pd.DataFrame(columns=akun_cols),
-            "Beban listrik": pd.DataFrame(columns=akun_cols),
-            "Beban perawatan": pd.DataFrame(columns=akun_cols),
-            "Beban prive": pd.DataFrame(columns=akun_cols)
-        }
-    else:
-        for k, df in st.session_state.accounts.items():
-            if "Ref" in df.columns:
-                st.session_state.accounts[k] = df.drop(columns=["Ref"])
-            for c in akun_cols:
-                if c not in st.session_state.accounts[k].columns:
-                    st.session_state.accounts[k][c] = []
-            st.session_state.accounts[k] = st.session_state.accounts[k][akun_cols]
+def df_to_pdf_bytes(title: str, subtitle: str, df: pd.DataFrame, widths=None, aligns=None, landscape=False):
+    if not FPDF_AVAILABLE:
+        return None
 
-    # Fungsi hitung saldo berjalan
-    def hitung_saldo(df: pd.DataFrame) -> pd.DataFrame:
-        if df.empty:
-            return df.copy()
-        dfx = df.copy()
-        dfx["Tanggal"] = pd.to_datetime(dfx["Tanggal"], errors='coerce')
-        for c in ["Debit", "Kredit"]:
-            dfx[c] = pd.to_numeric(dfx[c], errors="coerce").fillna(0.0)
+    cols = list(df.columns)
+    orientation = "L" if landscape else "P"
+    pdf = FPDF(orientation=orientation, unit="mm", format="A4")
+    pdf.set_auto_page_break(auto=True, margin=12)
+    pdf.add_page()
 
-        # Urutkan tanggal stabil
-        dfx = dfx.sort_values(["Tanggal"], kind="mergesort").reset_index(drop=True)
+    # Title
+    pdf.set_font("Arial", "B", 14)
+    pdf.cell(0, 8, title, ln=True, align="C")
+    pdf.set_font("Arial", "", 11)
+    if subtitle:
+        pdf.cell(0, 7, subtitle, ln=True, align="C")
+    pdf.ln(4)
 
-        # Running balance (Debit - Kredit)
-        running = 0.0
-        saldo_debit = []
-        saldo_kredit = []
-        for _, r in dfx.iterrows():
-            running += float(r["Debit"]) - float(r["Kredit"])
-            if running >= 0:
-                saldo_debit.append(running)
-                saldo_kredit.append(0.0)
+    # Default widths/aligns
+    if widths is None:
+        usable = 190 if orientation == "P" else 277
+        widths = [usable / len(cols)] * len(cols)
+    if aligns is None:
+        aligns = ["C"] * len(cols)
+
+    # Header
+    pdf.set_font("Arial", "B", 10)
+    for i, c in enumerate(cols):
+        pdf.cell(widths[i], 8, str(c), border=1, align="C")
+    pdf.ln()
+
+    # Rows
+    pdf.set_font("Arial", "", 9)
+    for _, row in df.iterrows():
+        for i, c in enumerate(cols):
+            val = row[c]
+            # format angka & tanggal
+            if isinstance(val, (int, float)):
+                s = format_rupiah(val)
             else:
-                saldo_debit.append(0.0)
-                saldo_kredit.append(abs(running))
-
-        dfx["Saldo Debit"] = saldo_debit
-        dfx["Saldo Kredit"] = saldo_kredit
-        dfx["Tanggal"] = dfx["Tanggal"].dt.date
-        return dfx
-
-    # Form transaksi Buku Besar (desain sama, dengan dropdown Akun)
-    st.subheader("Input Transaksi Baru")
-    akun_list = list(st.session_state.accounts.keys())
-    fbb = form_transaksi("form_input_tb", akun_options=akun_list)
-
-    if fbb["submitted"]:
-        if fbb["ket"].strip() == "":
-            st.error("Mohon isi kolom keterangan!")
-        elif fbb["jumlah"] <= 0:
-            st.error("Jumlah harus lebih dari nol!")
-        elif not fbb["akun"]:
-            st.error("Mohon pilih akun!")
-        else:
-            debit = float(fbb["jumlah"]) if fbb["tipe"] == "Debit" else 0.0
-            kredit = float(fbb["jumlah"]) if fbb["tipe"] == "Kredit" else 0.0
-            baris = pd.DataFrame({
-                "Tanggal": [fbb["tgl"]],
-                "Keterangan": [fbb["ket"].strip()],
-                "Debit": [debit],
-                "Kredit": [kredit],
-            })
-            st.session_state.accounts[fbb["akun"]] = pd.concat(
-                [st.session_state.accounts[fbb["akun"]], baris], ignore_index=True
-            )
-            st.success(f"Transaksi berhasil ditambahkan di akun {fbb['akun']}!")
-
-    st.divider()
-
-    # Tampilkan tabel buku besar per akun dengan saldo berjalan, di Tabs
-    tabs_akun = st.tabs(akun_list)
-    for i, akun in enumerate(akun_list):
-        with tabs_akun[i]:
-            st.markdown(f"Nama Akun : {akun}  \n")
-            df = st.session_state.accounts[akun]
-            df_show = hitung_saldo(df) if not df.empty else df.copy()
-            st.dataframe(style_table(df_show, add_total=True), use_container_width=True)
+                # tanggal -> dd-mm-YYYY
+                if c.lower().startswith("tanggal"):
+                    s = fmt_tgl(val)
+                else:
+                    s = str(val)
+            s = truncate_to_width(pdf
