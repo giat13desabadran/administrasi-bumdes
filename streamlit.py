@@ -2,9 +2,8 @@ import streamlit as st
 import pandas as pd
 from datetime import date
 import calendar
-import tempfile
 
-# PDF
+# PDF (fpdf2)
 try:
     from fpdf import FPDF  # pip install fpdf2
     FPDF_AVAILABLE = True
@@ -57,9 +56,13 @@ def format_rupiah(x):
         return x
 
 def style_table(df: pd.DataFrame, add_total: bool = True):
+    # Salinan untuk tampilan
     df_disp = df.copy()
+
+    # Penomoran baris mulai 1
     df_disp.index = range(1, len(df_disp) + 1)
 
+    # Tambahkan baris TOTAL (untuk Debit & Kredit)
     if add_total and not df_disp.empty:
         totals = {}
         for col in ["Debit", "Kredit"]:
@@ -71,6 +74,7 @@ def style_table(df: pd.DataFrame, add_total: bool = True):
         total_row.update(totals)
         df_disp = pd.concat([df_disp, pd.DataFrame([total_row])], ignore_index=False)
 
+    # Peta format
     format_map = {}
     if "Tanggal" in df_disp.columns:
         format_map["Tanggal"] = fmt_tgl
@@ -156,8 +160,10 @@ def hitung_saldo(df: pd.DataFrame) -> pd.DataFrame:
     for c in ["Debit", "Kredit"]:
         dfx[c] = pd.to_numeric(dfx[c], errors="coerce").fillna(0.0)
 
+    # Urutkan tanggal stabil
     dfx = dfx.sort_values(["Tanggal"], kind="mergesort").reset_index(drop=True)
 
+    # Running balance (Debit - Kredit)
     running = 0.0
     saldo_debit = []
     saldo_kredit = []
@@ -177,109 +183,17 @@ def hitung_saldo(df: pd.DataFrame) -> pd.DataFrame:
 
 # === Ledger per periode + Saldo Awal ===
 def ledger_periode_with_opening(df: pd.DataFrame, start: date, end: date) -> pd.DataFrame:
+    # Ledger periode + baris "Saldo Awal" dan saldo berjalan
     if df.empty:
         return pd.DataFrame([{
-            "Tanggal": start,
-            "Keterangan": "Saldo Awal",
-            "Debit": 0.0,
-            "Kredit": 0.0,
-            "Saldo Debit": 0.0,
-            "Saldo Kredit": 0.0
+            "Tanggal": start, "Keterangan": "Saldo Awal",
+            "Debit": 0.0, "Kredit": 0.0, "Saldo Debit": 0.0, "Saldo Kredit": 0.0
         }])
 
     dfx = df.copy()
-    dfx["Tanggal"] = pd.to_datetime(dfx["Tanggal"], errors='coerce')
+    dfx["Tanggal"] = pd.to_datetime(dfx["Tanggal"], errors="coerce")
     for c in ["Debit", "Kredit"]:
         dfx[c] = pd.to_numeric(dfx[c], errors="coerce").fillna(0.0)
 
     opening = dfx.loc[dfx["Tanggal"] < pd.to_datetime(start), "Debit"].sum() - \
-              dfx.loc[dfx["Tanggal"] < pd.to_datetime(start), "Kredit"].sum()
-
-    within = dfx[(dfx["Tanggal"] >= pd.to_datetime(start)) & (dfx["Tanggal"] <= pd.to_datetime(end))]
-    within = within.sort_values(["Tanggal"], kind="mergesort").reset_index(drop=True)
-
-    running = opening
-    saldo_debit = []
-    saldo_kredit = []
-    for _, r in within.iterrows():
-        running += float(r["Debit"]) - float(r["Kredit"])
-        if running >= 0:
-            saldo_debit.append(running)
-            saldo_kredit.append(0.0)
-        else:
-            saldo_debit.append(0.0)
-            saldo_kredit.append(abs(running))
-
-    within["Saldo Debit"] = saldo_debit
-    within["Saldo Kredit"] = saldo_kredit
-    within["Tanggal"] = within["Tanggal"].dt.date
-
-    opening_row = {
-        "Tanggal": start,
-        "Keterangan": "Saldo Awal",
-        "Debit": 0.0,
-        "Kredit": 0.0,
-        "Saldo Debit": opening if opening >= 0 else 0.0,
-        "Saldo Kredit": abs(opening) if opening < 0 else 0.0
-    }
-
-    if within.empty:
-        return pd.DataFrame([opening_row])
-    else:
-        return pd.concat([pd.DataFrame([opening_row]), within], ignore_index=True)
-
-# === PDF helpers ===
-def truncate_to_width(pdf: FPDF, text: str, max_width: float):
-    text = str(text)
-    if pdf.get_string_width(text) <= max_width:
-        return text
-    while pdf.get_string_width(text + "...") > max_width and len(text) > 0:
-        text = text[:-1]
-    return text + "..."
-
-def df_to_pdf_bytes(title: str, subtitle: str, df: pd.DataFrame, widths=None, aligns=None, landscape=False):
-    if not FPDF_AVAILABLE:
-        return None
-
-    cols = list(df.columns)
-    orientation = "L" if landscape else "P"
-    pdf = FPDF(orientation=orientation, unit="mm", format="A4")
-    pdf.set_auto_page_break(auto=True, margin=12)
-    pdf.add_page()
-
-    # Title
-    pdf.set_font("Arial", "B", 14)
-    pdf.cell(0, 8, title, ln=True, align="C")
-    pdf.set_font("Arial", "", 11)
-    if subtitle:
-        pdf.cell(0, 7, subtitle, ln=True, align="C")
-    pdf.ln(4)
-
-    # Default widths/aligns
-    if widths is None:
-        usable = 190 if orientation == "P" else 277
-        widths = [usable / len(cols)] * len(cols)
-    if aligns is None:
-        aligns = ["C"] * len(cols)
-
-    # Header
-    pdf.set_font("Arial", "B", 10)
-    for i, c in enumerate(cols):
-        pdf.cell(widths[i], 8, str(c), border=1, align="C")
-    pdf.ln()
-
-    # Rows
-    pdf.set_font("Arial", "", 9)
-    for _, row in df.iterrows():
-        for i, c in enumerate(cols):
-            val = row[c]
-            # format angka & tanggal
-            if isinstance(val, (int, float)):
-                s = format_rupiah(val)
-            else:
-                # tanggal -> dd-mm-YYYY
-                if c.lower().startswith("tanggal"):
-                    s = fmt_tgl(val)
-                else:
-                    s = str(val)
-            s = truncate_to_width(pdf
+              dfx.loc[dfx["Tanggal"] <
