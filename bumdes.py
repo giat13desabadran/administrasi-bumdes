@@ -648,16 +648,13 @@ with tab3:
     # Bangun Buku Besar periode
     bb_periode = buat_buku_besar_periode(bulan_neraca, tahun_neraca)
 
-    # Sync otomatis
-    sync_neraca_from_bb(bb_periode, non_destructive=True)
-
     # Jika Buku Besar kosong → tampilkan info dan hentikan tab
     if bb_periode is None or len(bb_periode) == 0:
         st.info("ℹ️ Belum ada data untuk Neraca Saldo pada periode ini. Silakan isi Jurnal Umum terlebih dahulu.")
         st.stop()
     
     else:
-    # Tombol kontrol
+        sync_neraca_from_bb(bb_periode, non_destructive=True)
         col1, col2, col3 = st.columns(3)
         
         with col1:
