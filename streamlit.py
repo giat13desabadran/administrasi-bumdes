@@ -3,7 +3,6 @@ import pandas as pd
 from fpdf import FPDF
 import tempfile
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
-from datetime import datetime
 
 # === Konfigurasi dasar ===
 st.set_page_config(page_title="Administrasi BUMDes", layout="wide")
@@ -20,7 +19,55 @@ if "neraca_saldo" not in st.session_state:
         {"No Akun": "", "Nama Akun": "", "Debit (Rp)": 0, "Kredit (Rp)": 0}
     ])
 
-# ... (data lainnya tetap sama) ...
+if "pendapatan" not in st.session_state:
+    st.session_state.pendapatan = pd.DataFrame([
+        {"Jenis Pendapatan": "", "Jumlah (Rp)": 0}
+    ])
+
+if "beban" not in st.session_state:
+    st.session_state.beban = pd.DataFrame([
+        {"Jenis Beban": "", "Jumlah (Rp)": 0}
+    ])
+
+if "modal_data" not in st.session_state:
+    st.session_state.modal_data = {
+        "modal_awal": 0,
+        "prive": 0
+    }
+
+if "aktiva_lancar" not in st.session_state:
+    st.session_state.aktiva_lancar = pd.DataFrame([
+        {"Item": "", "Jumlah (Rp)": 0}
+    ])
+
+if "aktiva_tetap" not in st.session_state:
+    st.session_state.aktiva_tetap = pd.DataFrame([
+        {"Item": "", "Jumlah (Rp)": 0}
+    ])
+
+if "kewajiban" not in st.session_state:
+    st.session_state.kewajiban = pd.DataFrame([
+        {"Item": "", "Jumlah (Rp)": 0}
+    ])
+
+if "arus_kas_operasi" not in st.session_state:
+    st.session_state.arus_kas_operasi = pd.DataFrame([
+        {"Aktivitas": "", "Jumlah (Rp)": 0}
+    ])
+
+if "arus_kas_investasi" not in st.session_state:
+    st.session_state.arus_kas_investasi = pd.DataFrame([
+        {"Aktivitas": "", "Jumlah (Rp)": 0}
+    ])
+
+if "arus_kas_pendanaan" not in st.session_state:
+    st.session_state.arus_kas_pendanaan = pd.DataFrame([
+        {"Aktivitas": "", "Jumlah (Rp)": 0}
+    ])
+
+# Data untuk Buku Besar
+if "buku_besar" not in st.session_state:
+    st.session_state.buku_besar = {}
 
 # === Fungsi format rupiah ===
 def format_rupiah(x):
@@ -30,47 +77,6 @@ def format_rupiah(x):
         return f"{x:,.0f}".replace(",", ".")
     except Exception:
         return x
-
-# === Fungsi untuk validasi dan pemrosesan data ===
-def validasi_jurnal(df):
-    """Validasi keseimbangan debit dan kredit"""
-    total_debit = df["Debit (Rp)"].sum()
-    total_kredit = df["Kredit (Rp)"].sum()
-    return total_debit == total_kredit, total_debit, total_kredit
-
-def proses_ke_buku_besar(jurnal_df):
-    """Memproses jurnal ke buku besar"""
-    buku_besar = {}
-    
-    for _, row in jurnal_df.iterrows():
-        if not row["Akun"] or not str(row["Akun"]).strip():
-            continue
-            
-        akun = str(row["Akun"]).strip()
-        
-        if akun not in buku_besar:
-            buku_besar[akun] = {
-                "nama_akun": f"Akun {akun}",
-                "debit": 0,
-                "kredit": 0,
-                "saldo": 0,
-                "transaksi": []
-            }
-        
-        # Tambahkan transaksi
-        transaksi = {
-            "tanggal": row["Tanggal"],
-            "keterangan": row["Keterangan"],
-            "debit": row["Debit (Rp)"],
-            "kredit": row["Kredit (Rp)"]
-        }
-        
-        buku_besar[akun]["transaksi"].append(transaksi)
-        buku_besar[akun]["debit"] += row["Debit (Rp)"]
-        buku_besar[akun]["kredit"] += row["Kredit (Rp)"]
-        buku_besar[akun]["saldo"] = buku_besar[akun]["debit"] - buku_besar[akun]["kredit"]
-    
-    return buku_besar
 
 # === Fungsi AgGrid ===
 def create_aggrid(df, key_suffix, height=400):
@@ -98,6 +104,54 @@ def create_aggrid(df, key_suffix, height=400):
     )
     
     return pd.DataFrame(grid_response["data"])
+
+# === Fungsi untuk membuat buku besar ===
+def buat_buku_besar():
+    # Inisialisasi struktur buku besar berdasarkan referensi akun
+    buku_besar = {}
+    
+    # Proses setiap entri jurnal
+    for _, row in st.session_state.data.iterrows():
+        if not row["Akun"] or not str(row["Akun"]).strip():
+            continue
+            
+        akun = str(row["Akun"]).strip()
+        
+        # Buat entri baru jika akun belum ada
+        if akun not in buku_besar:
+            buku_besar[akun] = {
+                "nama_akun": f"Akun {akun}",
+                "debit": 0,
+                "kredit": 0,
+                "transaksi": []
+            }
+        
+        # Tambahkan transaksi
+        if row["Debit (Rp)"] > 0:
+            buku_besar[akun]["transaksi"].append({
+                "tanggal": row["Tanggal"],
+                "keterangan": row["Keterangan"],
+                "debit": row["Debit (Rp)"],
+                "kredit": 0
+            })
+            buku_besar[akun]["debit"] += row["Debit (Rp)"]
+        
+        if row["Kredit (Rp)"] > 0:
+            buku_besar[akun]["transaksi"].append({
+                "tanggal": row["Tanggal"],
+                "keterangan": row["Keterangan"],
+                "debit": 0,
+                "kredit": row["Kredit (Rp)"]
+            })
+            buku_besar[akun]["kredit"] += row["Kredit (Rp)"]
+    
+    # Tambahkan nama akun dari neraca saldo jika tersedia
+    for _, row in st.session_state.neraca_saldo.iterrows():
+        akun_no = str(row["No Akun"]).strip()
+        if akun_no and akun_no in buku_besar:
+            buku_besar[akun_no]["nama_akun"] = row["Nama Akun"]
+    
+    return buku_besar
 
 # === Styling ===
 st.markdown("""
