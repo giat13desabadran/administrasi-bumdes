@@ -113,10 +113,11 @@ def create_aggrid(df, key_suffix, height=400):
     return pd.DataFrame(grid_response["data"])
 
 # === Fungsi untuk membuat buku besar ===
+# === Fungsi untuk membuat buku besar ===
 def buat_buku_besar():
     df = st.session_state.data.copy()
 
-    # Paksa semua kolom numeric jadi float
+    # Pastikan kolom numeric adalah float
     df["Debit (Rp)"] = pd.to_numeric(df["Debit (Rp)"], errors="coerce").fillna(0).astype(float)
     df["Kredit (Rp)"] = pd.to_numeric(df["Kredit (Rp)"], errors="coerce").fillna(0).astype(float)
 
@@ -130,34 +131,29 @@ def buat_buku_besar():
         if akun not in buku_besar:
             buku_besar[akun] = {
                 "nama_akun": f"Akun {akun}",
-                "debit": 0,
-                "kredit": 0,
+                "debit": 0.0,
+                "kredit": 0.0,
                 "transaksi": []
             }
 
-        # Paksa float agar aman
+        # Konversi nilai ke float dengan aman
         try:
             debit = float(row.get("Debit (Rp)", 0) or 0)
         except:
             debit = 0.0
+        
         try:
             kredit = float(row.get("Kredit (Rp)", 0) or 0)
         except:
             kredit = 0.0
 
-        transaksi = {
-            "tanggal": row.get("Tanggal", ""),
-            "keterangan": row.get("Keterangan", ""),
-            "debit": debit,
-            "kredit": kredit
-        }
-
+        # Tambahkan transaksi jika ada nilai
         if debit > 0:
             buku_besar[akun]["transaksi"].append({
                 "tanggal": row.get("Tanggal", ""),
                 "keterangan": row.get("Keterangan", ""),
                 "debit": debit,
-                "kredit": 0
+                "kredit": 0.0
             })
             buku_besar[akun]["debit"] += debit
 
@@ -165,7 +161,7 @@ def buat_buku_besar():
             buku_besar[akun]["transaksi"].append({
                 "tanggal": row.get("Tanggal", ""),
                 "keterangan": row.get("Keterangan", ""),
-                "debit": 0,
+                "debit": 0.0,
                 "kredit": kredit
             })
             buku_besar[akun]["kredit"] += kredit
@@ -173,11 +169,11 @@ def buat_buku_besar():
     # Update nama akun dari neraca saldo
     for _, row in st.session_state.neraca_saldo.iterrows():
         akun_no = str(row.get("No Akun", "")).strip()
-        if akun_no in buku_besar:
-            buku_besar[akun_no]["nama_akun"] = row.get("Nama Akun", buku_besar[akun_no]["nama_akun"])
+        nama_akun = str(row.get("Nama Akun", "")).strip()
+        if akun_no in buku_besar and nama_akun:
+            buku_besar[akun_no]["nama_akun"] = nama_akun
 
-return buku_besar
-
+    return buku_besar
 
 # === Styling ===
 st.markdown("""
