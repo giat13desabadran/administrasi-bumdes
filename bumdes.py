@@ -13,7 +13,7 @@ def init_dataframe(columns):
     return pd.DataFrame([{col: 0 if "(Rp)" in col or col == "Jumlah (Rp)" else "" for col in columns}])
 
 if "data" not in st.session_state:
-    st.session_state.data = init_dataframe(["Tanggal", "Keterangan", "Akun", "Debit (Rp)", "Kredit (Rp)"])
+    st.session_state.data = init_dataframe(["Tanggal", "Keterangan", "Ref", "Akun", "Debit (Rp)", "Kredit (Rp)"])
 
 if "neraca_saldo" not in st.session_state:
     st.session_state.neraca_saldo = init_dataframe(["No Akun", "Nama Akun", "Debit (Rp)", "Kredit (Rp)"])
@@ -183,6 +183,7 @@ with tab1:
         new_row = pd.DataFrame({
             "Tanggal": [""], 
             "Keterangan": [""], 
+            "Ref": [""],
             "Akun": [""], 
             "Debit (Rp)": [0], 
             "Kredit (Rp)": [0]
@@ -234,6 +235,7 @@ with tab1:
         total_row = pd.DataFrame({
             "Tanggal": [""],
             "Keterangan": ["TOTAL"],
+            "Ref": [""],
             "Akun": [""],
             "Debit (Rp)": [total_debit],
             "Kredit (Rp)": [total_kredit],
