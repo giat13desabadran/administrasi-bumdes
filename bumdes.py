@@ -179,9 +179,16 @@ with tab1:
     if st.button("➕ Tambah Baris Jurnal", key="tambah_jurnal"):
         new_row = pd.DataFrame([{"Tanggal": "", "Keterangan": "", "Akun": "", "Debit (Rp)": 0, "Kredit (Rp)": 0}])
         st.session_state.data = pd.concat([st.session_state.data, new_row], ignore_index=True)
+        st.rerun()
+
+     # AgGrid
+    updated_data = create_aggrid(st.session_state.data, key_suffix="jurnal", height=320)
+    
+    # Update session state dengan data yang telah diubah
+    st.session_state.data = updated_data
     
     # AgGrid
-    st.session_state.data = create_aggrid(st.session_state.data, key_suffix="jurnal", height=320)
+    # st.session_state.data = create_aggrid(st.session_state.data, key_suffix="jurnal", height=320)
     
     # Filter baris valid
     df_clean = st.session_state.data[st.session_state.data["Keterangan"].astype(str).str.strip() != ""]
