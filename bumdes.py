@@ -62,7 +62,7 @@ def format_rupiah(x):
 def create_aggrid(df, key_suffix, height=400):
     gb = GridOptionsBuilder.from_dataframe(df)
     gb.configure_default_column(editable=True, resizable=True)
-    gb.configure_grid_options(stopEditingWhenCellsLoseFocus=False)
+    gb.configure_grid_options(stopEditingWhenCellsLoseFocus=True)
     
     for col in df.columns:
         if "(Rp)" in col:
@@ -161,6 +161,9 @@ with tab1:
     st.header("🧾 Jurnal Umum")
     st.info("💡 Tekan Enter sekali untuk menyimpan perubahan otomatis.")
 
+    if "grid_key" not in st.session_state:
+        st.session_state.grid_key = 0
+
     # --- Input bulan dan tahun ---
     col1, col2 = st.columns(2)
     with col1:
@@ -185,19 +188,19 @@ with tab1:
             "Kredit (Rp)": [0]
         })
         # Simpan data yang ada dulu dari AgGrid
-        if 'grid_response' in st.session_state:
-            st.session_state.data = st.session_state.grid_response['data']
+        #if 'grid_response' in st.session_state:
+            #st.session_state.data = st.session_state.grid_response['data']
         # Tambah baris baru
         st.session_state.data = pd.concat([st.session_state.data, new_row], ignore_index=True)
+        st.session_state.grid_key += 1
     
     # Tombol tambah baris
-    if st.button("➕ Tambah Baris Jurnal", key="tambah_jurnal", on_click=add_journal_row):
-        pass
+    st.button("➕ Tambah Baris Jurnal", key="tambah_jurnal", on_click=add_journal_row)
     
     # Setup AgGrid
     gb = GridOptionsBuilder.from_dataframe(st.session_state.data)
     gb.configure_default_column(editable=True, resizable=True)
-    gb.configure_grid_options(stopEditingWhenCellsLoseFocus=False)
+    gb.configure_grid_options(stopEditingWhenCellsLoseFocus=True)
     
     for col in st.session_state.data.columns:
         if "(Rp)" in col:
@@ -215,7 +218,7 @@ with tab1:
         enable_enterprise_modules=False,
         theme="streamlit",
         height=320,
-        key="jurnal_grid",
+        key=f"jurnal_grid_{st.session_state.grid_key}",
         reload_data=True
     )
     
