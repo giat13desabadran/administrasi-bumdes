@@ -78,13 +78,6 @@ def format_rupiah(x):
     except Exception:
         return x
 
-# Fungsi format tanggal
-def parse_date_safe(s):
-    try:
-        return pd.to_datetime(s, format="%Y-%m-%d", errors="raise").date()
-    except:
-        return None
-        
 # === Fungsi AgGrid ===
 def create_aggrid(df, key_suffix, height=400):
     gb = GridOptionsBuilder.from_dataframe(df)
@@ -113,7 +106,6 @@ def create_aggrid(df, key_suffix, height=400):
     return pd.DataFrame(grid_response["data"])
 
 # === Fungsi untuk membuat buku besar ===
-# === Fungsi untuk membuat buku besar ===
 def buat_buku_besar():
     df = st.session_state.data.copy()
 
@@ -138,33 +130,43 @@ def buat_buku_besar():
 
         # Konversi nilai ke float dengan aman
         try:
-            debit = float(row.get("Debit (Rp)", 0) or 0)
-        except:
-            debit = 0.0
+            debit_val = float(row.get("Debit (Rp)", 0) or 0)
+        except (ValueError, TypeError):
+            debit_val = 0.0
         
         try:
-            kredit = float(row.get("Kredit (Rp)", 0) or 0)
-        except:
-            kredit = 0.0
+            kredit_val = float(row.get("Kredit (Rp)", 0) or 0)
+        except (ValueError, TypeError):
+            kredit_val = 0.0
+
+        # Dapatkan nilai tanggal dan keterangan dengan aman
+        tanggal = row.get("Tanggal", "")
+        if pd.isna(tanggal) or tanggal == "":
+            tanggal = ""
+        else:
+            # Konversi ke string jika perlu
+            tanggal = str(tanggal)
+        
+        keterangan = str(row.get("Keterangan", "")).strip()
 
         # Tambahkan transaksi jika ada nilai
-        if debit > 0:
+        if debit_val > 0:
             buku_besar[akun]["transaksi"].append({
-                "tanggal": row.get("Tanggal", ""),
-                "keterangan": row.get("Keterangan", ""),
-                "debit": debit,
+                "tanggal": tanggal,
+                "keterangan": keterangan,
+                "debit": debit_val,
                 "kredit": 0.0
             })
-            buku_besar[akun]["debit"] += debit
+            buku_besar[akun]["debit"] += debit_val
 
-        if kredit > 0:
+        if kredit_val > 0:
             buku_besar[akun]["transaksi"].append({
-                "tanggal": row.get("Tanggal", ""),
-                "keterangan": row.get("Keterangan", ""),
+                "tanggal": tanggal,
+                "keterangan": keterangan,
                 "debit": 0.0,
-                "kredit": kredit
+                "kredit": kredit_val
             })
-            buku_besar[akun]["kredit"] += kredit
+            buku_besar[akun]["kredit"] += kredit_val
 
     # Update nama akun dari neraca saldo
     for _, row in st.session_state.neraca_saldo.iterrows():
@@ -236,21 +238,7 @@ with tab1:
     gb = GridOptionsBuilder.from_dataframe(st.session_state.data)
     gb.configure_default_column(editable=True, resizable=True)
     gb.configure_grid_options(stopEditingWhenCellsLoseFocus=False)
-    gb.configure_column(
-    "Tanggal",
-    editable=True,
-    cellEditor="agDateCellEditor",
-    valueFormatter="value ? new Date(value).toLocaleDateString('en-CA') : ''",
-    valueParser="""
-        function(params){
-            if (!params.newValue) return '';
-            // Konversi ke tanggal ISO
-            const d = new Date(params.newValue);
-            if (isNaN(d)) return '';
-            return d.toISOString().split('T')[0]; // "YYYY-MM-DD"
-        }
-    """
-    )
+    gb.configure_column("Tanggal", header_name="Tanggal (YYYY-MM-DD)")
     gb.configure_column("Keterangan", header_name="Keterangan")
     gb.configure_column("Akun", header_name="Akun (contoh: Perlengkapan)")
     gb.configure_column("Debit (Rp)", type=["numericColumn"], valueFormatter="value ? value.toLocaleString() : ''")
@@ -272,22 +260,17 @@ with tab1:
     )
 
     new_df = pd.DataFrame(grid_response["data"])
+    
+    # Konversi tipe data setelah AgGrid
+    if "Tanggal" in new_df.columns:
+        # Konversi Tanggal ke string dan handle missing values
+        new_df["Tanggal"] = new_df["Tanggal"].astype(str).replace({'nan': '', 'None': '', 'NaT': ''})
+        
+    # Konversi kolom numerik
     for col in ["Debit (Rp)", "Kredit (Rp)"]:
         if col in new_df.columns:
             new_df[col] = pd.to_numeric(new_df[col], errors="coerce").fillna(0)
-    if "Tanggal" in new_df.columns:
-        # ubah semua jadi string dulu, strip whitespace
-        new_df["Tanggal"] = new_df["Tanggal"].astype(str).str.strip()
         
-        # ubah string kosong atau "None"/"nan" menjadi NaN
-        new_df["Tanggal"] = new_df["Tanggal"].replace({"": pd.NA, "None": pd.NA, "nan": pd.NA})
-        
-        # konversi ke datetime, invalid jadi NaT
-        new_df["Tanggal"] = pd.to_datetime(new_df["Tanggal"], errors="coerce")
-        
-        # ubah NaT menjadi string kosong agar tampil di st.dataframe
-        new_df["Tanggal"] = new_df["Tanggal"].dt.strftime('%Y-%m-%d').fillna('')
-
     if not new_df.equals(st.session_state.data):
         st.session_state.data = new_df.copy()
 
@@ -310,7 +293,6 @@ with tab1:
         df_final_display.index = range(1, len(df_final_display) + 1)
         df_final_display.index.name = "No"
     
-        
         st.dataframe(df_final_display.style.format({
             "Debit (Rp)": format_rupiah,
             "Kredit (Rp)": format_rupiah
