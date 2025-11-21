@@ -9,74 +9,54 @@ st.set_page_config(page_title="Administrasi BUMDes", layout="wide")
 st.title("📘 Sistem Akuntansi BUMDes")
 
 # === Inisialisasi data awal ===
+def init_dataframe(columns):
+    return pd.DataFrame([{col: 0 if "(Rp)" in col or col == "Jumlah (Rp)" else "" for col in columns}])
+
 if "data" not in st.session_state:
-    st.session_state.data = pd.DataFrame([
-        {"Tanggal": "", "Keterangan": "", "Akun": "", "Debit (Rp)": 0, "Kredit (Rp)": 0}
-    ])
+    st.session_state.data = init_dataframe(["Tanggal", "Keterangan", "Akun", "Debit (Rp)", "Kredit (Rp)"])
 
 if "neraca_saldo" not in st.session_state:
-    st.session_state.neraca_saldo = pd.DataFrame([
-        {"No Akun": "", "Nama Akun": "", "Debit (Rp)": 0, "Kredit (Rp)": 0}
-    ])
+    st.session_state.neraca_saldo = init_dataframe(["No Akun", "Nama Akun", "Debit (Rp)", "Kredit (Rp)"])
 
 if "pendapatan" not in st.session_state:
-    st.session_state.pendapatan = pd.DataFrame([
-        {"Jenis Pendapatan": "", "Jumlah (Rp)": 0}
-    ])
+    st.session_state.pendapatan = init_dataframe(["Jenis Pendapatan", "Jumlah (Rp)"])
 
 if "beban" not in st.session_state:
-    st.session_state.beban = pd.DataFrame([
-        {"Jenis Beban": "", "Jumlah (Rp)": 0}
-    ])
+    st.session_state.beban = init_dataframe(["Jenis Beban", "Jumlah (Rp)"])
 
 if "modal_data" not in st.session_state:
-    st.session_state.modal_data = {
-        "modal_awal": 0,
-        "prive": 0
-    }
+    st.session_state.modal_data = {"modal_awal": 0, "prive": 0}
 
 if "aktiva_lancar" not in st.session_state:
-    st.session_state.aktiva_lancar = pd.DataFrame([
-        {"Item": "", "Jumlah (Rp)": 0}
-    ])
+    st.session_state.aktiva_lancar = init_dataframe(["Item", "Jumlah (Rp)"])
 
 if "aktiva_tetap" not in st.session_state:
-    st.session_state.aktiva_tetap = pd.DataFrame([
-        {"Item": "", "Jumlah (Rp)": 0}
-    ])
+    st.session_state.aktiva_tetap = init_dataframe(["Item", "Jumlah (Rp)"])
 
 if "kewajiban" not in st.session_state:
-    st.session_state.kewajiban = pd.DataFrame([
-        {"Item": "", "Jumlah (Rp)": 0}
-    ])
+    st.session_state.kewajiban = init_dataframe(["Item", "Jumlah (Rp)"])
 
 if "arus_kas_operasi" not in st.session_state:
-    st.session_state.arus_kas_operasi = pd.DataFrame([
-        {"Aktivitas": "", "Jumlah (Rp)": 0}
-    ])
+    st.session_state.arus_kas_operasi = init_dataframe(["Aktivitas", "Jumlah (Rp)"])
 
 if "arus_kas_investasi" not in st.session_state:
-    st.session_state.arus_kas_investasi = pd.DataFrame([
-        {"Aktivitas": "", "Jumlah (Rp)": 0}
-    ])
+    st.session_state.arus_kas_investasi = init_dataframe(["Aktivitas", "Jumlah (Rp)"])
 
 if "arus_kas_pendanaan" not in st.session_state:
-    st.session_state.arus_kas_pendanaan = pd.DataFrame([
-        {"Aktivitas": "", "Jumlah (Rp)": 0}
-    ])
+    st.session_state.arus_kas_pendanaan = init_dataframe(["Aktivitas", "Jumlah (Rp)"])
 
-# Data untuk Buku Besar
 if "buku_besar" not in st.session_state:
     st.session_state.buku_besar = {}
 
-# === Fungsi format rupiah ===
+# === Fungsi format rupiah aman ===
 def format_rupiah(x):
     try:
+        x = float(x)
         if x < 0:
             return f"({abs(x):,.0f})".replace(",", ".")
         return f"{x:,.0f}".replace(",", ".")
-    except Exception:
-        return x
+    except (ValueError, TypeError):
+        return ""
 
 # === Fungsi AgGrid ===
 def create_aggrid(df, key_suffix, height=400):
@@ -103,71 +83,45 @@ def create_aggrid(df, key_suffix, height=400):
         reload_data=False
     )
     
+    # Konversi kolom numerik ke float
+    for col in df.columns:
+        if "(Rp)" in col:
+            grid_response["data"][col] = pd.to_numeric(grid_response["data"][col], errors="coerce").fillna(0)
+    # Konversi tanggal aman
+    if "Tanggal" in grid_response["data"]:
+        grid_response["data"]["Tanggal"] = grid_response["data"]["Tanggal"].apply(lambda x: "" if pd.isna(x) else str(x))
+    
     return pd.DataFrame(grid_response["data"])
 
 # === Fungsi untuk membuat buku besar ===
 def buat_buku_besar():
     df = st.session_state.data.copy()
-
+    
     # Pastikan kolom numeric adalah float
-    df["Debit (Rp)"] = pd.to_numeric(df["Debit (Rp)"], errors="coerce").fillna(0).astype(float)
-    df["Kredit (Rp)"] = pd.to_numeric(df["Kredit (Rp)"], errors="coerce").fillna(0).astype(float)
-
+    for col in ["Debit (Rp)", "Kredit (Rp)"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+    
     buku_besar = {}
-
     for _, row in df.iterrows():
         akun = str(row.get("Akun", "")).strip()
         if not akun:
             continue
-
+        
         if akun not in buku_besar:
-            buku_besar[akun] = {
-                "nama_akun": f"Akun {akun}",
-                "debit": 0.0,
-                "kredit": 0.0,
-                "transaksi": []
-            }
-
-        # Konversi nilai ke float dengan aman
-        try:
-            debit_val = float(row.get("Debit (Rp)", 0) or 0)
-        except (ValueError, TypeError):
-            debit_val = 0.0
+            buku_besar[akun] = {"nama_akun": f"Akun {akun}", "debit": 0.0, "kredit": 0.0, "transaksi": []}
         
-        try:
-            kredit_val = float(row.get("Kredit (Rp)", 0) or 0)
-        except (ValueError, TypeError):
-            kredit_val = 0.0
-
-        # Dapatkan nilai tanggal dan keterangan dengan aman
-        tanggal = row.get("Tanggal", "")
-        if pd.isna(tanggal) or tanggal == "":
-            tanggal = ""
-        else:
-            # Konversi ke string jika perlu
-            tanggal = str(tanggal)
-        
+        debit_val = float(row.get("Debit (Rp)", 0) or 0)
+        kredit_val = float(row.get("Kredit (Rp)", 0) or 0)
+        tanggal = "" if pd.isna(row.get("Tanggal", "")) else str(row.get("Tanggal", ""))
         keterangan = str(row.get("Keterangan", "")).strip()
-
-        # Tambahkan transaksi jika ada nilai
+        
         if debit_val > 0:
-            buku_besar[akun]["transaksi"].append({
-                "tanggal": tanggal,
-                "keterangan": keterangan,
-                "debit": debit_val,
-                "kredit": 0.0
-            })
+            buku_besar[akun]["transaksi"].append({"tanggal": tanggal, "keterangan": keterangan, "debit": debit_val, "kredit": 0.0})
             buku_besar[akun]["debit"] += debit_val
-
         if kredit_val > 0:
-            buku_besar[akun]["transaksi"].append({
-                "tanggal": tanggal,
-                "keterangan": keterangan,
-                "debit": 0.0,
-                "kredit": kredit_val
-            })
+            buku_besar[akun]["transaksi"].append({"tanggal": tanggal, "keterangan": keterangan, "debit": 0.0, "kredit": kredit_val})
             buku_besar[akun]["kredit"] += kredit_val
-
+    
     # Update nama akun dari neraca saldo
     for _, row in st.session_state.neraca_saldo.iterrows():
         akun_no = str(row.get("No Akun", "")).strip()
@@ -177,7 +131,7 @@ def buat_buku_besar():
 
     return buku_besar
 
-# === Styling ===
+# === Styling AgGrid ===
 st.markdown("""
 <style>
 .ag-theme-streamlit {
@@ -198,12 +152,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # === Tabs ===
-tab1, tab2, tab3, tab4 = st.tabs([
-    "🧾 Jurnal Umum", 
-    "📚 Buku Besar", 
-    "💵 Neraca Saldo",
-    "📊 Laporan Keuangan"
-])
+tab1, tab2, tab3, tab4 = st.tabs(["🧾 Jurnal Umum", "📚 Buku Besar", "💵 Neraca Saldo", "📊 Laporan Keuangan"])
 
 # ========================================
 # TAB 1: JURNAL UMUM
@@ -217,65 +166,26 @@ with tab1:
     with col1:
         bulan_selected = st.selectbox(
             "Pilih Bulan", 
-            options=[
-                ("01", "Januari"), ("02", "Februari"), ("03", "Maret"),
-                ("04", "April"), ("05", "Mei"), ("06", "Juni"),
-                ("07", "Juli"), ("08", "Agustus"), ("09", "September"),
-                ("10", "Oktober"), ("11", "November"), ("12", "Desember")
-            ],
+            options=[("01", "Januari"), ("02", "Februari"), ("03", "Maret"),
+                     ("04", "April"), ("05", "Mei"), ("06", "Juni"),
+                     ("07", "Juli"), ("08", "Agustus"), ("09", "September"),
+                     ("10", "Oktober"), ("11", "November"), ("12", "Desember")],
             format_func=lambda x: x[1]
-        )[0]  # ambil kode bulan "01"-"12"
+        )[0]
     with col2:
         tahun_selected = st.number_input("Tahun", min_value=2000, max_value=2100, value=pd.Timestamp.now().year, step=1)
-        
-    # Tombol tambah baris untuk Jurnal Umum
+    
+    # Tombol tambah baris
     if st.button("➕ Tambah Baris Jurnal", key="tambah_jurnal"):
         new_row = pd.DataFrame([{"Tanggal": "", "Keterangan": "", "Akun": "", "Debit (Rp)": 0, "Kredit (Rp)": 0}])
         st.session_state.data = pd.concat([st.session_state.data, new_row], ignore_index=True)
-        st.rerun()
-
-    # Konfigurasi Grid 
-    gb = GridOptionsBuilder.from_dataframe(st.session_state.data)
-    gb.configure_default_column(editable=True, resizable=True)
-    gb.configure_grid_options(stopEditingWhenCellsLoseFocus=False)
-    gb.configure_column("Tanggal", header_name="Tanggal (YYYY-MM-DD)")
-    gb.configure_column("Keterangan", header_name="Keterangan")
-    gb.configure_column("Akun", header_name="Akun (contoh: Perlengkapan)")
-    gb.configure_column("Debit (Rp)", type=["numericColumn"], valueFormatter="value ? value.toLocaleString() : ''")
-    gb.configure_column("Kredit (Rp)", type=["numericColumn"], valueFormatter="value ? value.toLocaleString() : ''")
-
-    grid_options = gb.build()
-
-    grid_response = AgGrid(
-        st.session_state.data,
-        gridOptions=grid_options,
-        update_mode=GridUpdateMode.VALUE_CHANGED,
-        fit_columns_on_grid_load=True,
-        allow_unsafe_jscode=True,
-        enable_enterprise_modules=False,
-        theme="streamlit",
-        height=320,
-        key="aggrid_jurnal",
-        reload_data=False
-    )
-
-    new_df = pd.DataFrame(grid_response["data"])
     
-    # Konversi tipe data setelah AgGrid
-    if "Tanggal" in new_df.columns:
-        # Konversi Tanggal ke string dan handle missing values
-        new_df["Tanggal"] = new_df["Tanggal"].astype(str).replace({'nan': '', 'None': '', 'NaT': ''})
-        
-    # Konversi kolom numerik
-    for col in ["Debit (Rp)", "Kredit (Rp)"]:
-        if col in new_df.columns:
-            new_df[col] = pd.to_numeric(new_df[col], errors="coerce").fillna(0)
-        
-    if not new_df.equals(st.session_state.data):
-        st.session_state.data = new_df.copy()
-
-    df_clean = new_df[new_df["Keterangan"].astype(str).str.strip() != ""]
-
+    # AgGrid
+    st.session_state.data = create_aggrid(st.session_state.data, key_suffix="jurnal", height=320)
+    
+    # Filter baris valid
+    df_clean = st.session_state.data[st.session_state.data["Keterangan"].astype(str).str.strip() != ""]
+    
     if not df_clean.empty:
         total_debit = df_clean["Debit (Rp)"].sum()
         total_kredit = df_clean["Kredit (Rp)"].sum()
@@ -290,51 +200,42 @@ with tab1:
 
         st.write("### 📊 Hasil Jurnal")
         df_final_display = df_final.copy()
-        df_final_display.index = range(1, len(df_final_display) + 1)
+        df_final_display.index = range(1, len(df_final_display)+1)
         df_final_display.index.name = "No"
-    
         st.dataframe(df_final_display.style.format({
             "Debit (Rp)": format_rupiah,
             "Kredit (Rp)": format_rupiah
         }))
 
+        # --- PDF ---
         def buat_pdf(df, bulan, tahun):
             import calendar
             pdf = FPDF()
             pdf.add_page()
             pdf.set_font("Arial", size=12)
             
-            # Konversi angka bulan ke nama bulan Indonesia
             bulan_dict = {
-                1: "Januari",
-                2: "Februari",
-                3: "Maret",
-                4: "April",
-                5: "Mei",
-                6: "Juni",
-                7: "Juli",
-                8: "Agustus",
-                9: "September",
-                10: "Oktober",
-                11: "November",
-                12: "Desember"
+                1: "Januari", 2: "Februari", 3: "Maret", 4: "April", 5: "Mei",
+                6: "Juni", 7: "Juli", 8: "Agustus", 9: "September",
+                10: "Oktober", 11: "November", 12: "Desember"
             }
+            try:
+                bulan_nama = bulan_dict.get(int(bulan), calendar.month_name[int(bulan)])
+            except:
+                bulan_nama = "Unknown"
             
-            bulan_nama = bulan_dict.get(int(bulan), calendar.month_name[int(bulan)])
             pdf.cell(200, 10, txt=f"Jurnal Umum BUMDes - {bulan_nama} {tahun}", ln=True, align="C")
             pdf.ln(8)
         
             col_width = 190 / len(df.columns)
-            # Header tabel
-            pdf.set_font("Arial", size=10, style="B")  # Bold untuk header
+            pdf.set_font("Arial", size=10, style="B")
             for col in df.columns:
                 pdf.cell(col_width, 10, col, border=1, align="C")
             pdf.ln()
         
-            pdf.set_font("Arial", size=9)  # Ukuran font lebih kecil untuk konten
+            pdf.set_font("Arial", size=9)
             for _, row in df.iterrows():
                 for item in row:
-                    # Format angka jika nilai numerik
                     if isinstance(item, (int, float)):
                         item = f"{item:,.0f}".replace(",", ".")
                     pdf.cell(col_width, 8, str(item), border=1, align="C")
@@ -345,7 +246,6 @@ with tab1:
                 tmp.seek(0)
                 return tmp.read()
         
-        # Pastikan bulan_selected adalah angka (bukan nama bulan)
         pdf_data = buat_pdf(df_final, bulan_selected, tahun_selected)
         st.download_button(
             "📥 Download PDF",
