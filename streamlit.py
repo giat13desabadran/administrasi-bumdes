@@ -196,16 +196,24 @@ with tab1:
     st.info("💡 Tekan Enter sekali untuk menyimpan perubahan otomatis.")
 
     # Tombol tambah baris untuk Jurnal Umum
-    if st.button("➕ Tambah Baris Jurnal", key="tambah_jurnal"):
-        new_row = pd.DataFrame([{"Tanggal": "", "Keterangan": "", "Akun": "", "Debit (Rp)": 0, "Kredit (Rp)": 0}])
+    #if st.button("➕ Tambah Baris Jurnal", key="tambah_jurnal"):
+        #new_row = pd.DataFrame([{"Tanggal": "", "Keterangan": "", "Akun": "", "Debit (Rp)": 0, "Kredit (Rp)": 0}])
+        #st.session_state.data = pd.concat([st.session_state.data, new_row], ignore_index=True)
+        #st.rerun()
+    # Tombol tambah baris
+    if st.button("➕ Tambah Baris Jurnal"):
+        new_row = pd.DataFrame([{
+            "Tanggal": "", "Keterangan": "", "Akun": "", "Debit (Rp)": 0, "Kredit (Rp)": 0
+        }])
         st.session_state.data = pd.concat([st.session_state.data, new_row], ignore_index=True)
+        st.session_state.aggrid_jurnal = st.session_state.data.copy()
         st.rerun()
 
-
-    # Konfigurasi Grid 
+    # Konfigurasi AgGrid
     gb = GridOptionsBuilder.from_dataframe(st.session_state.data)
     gb.configure_default_column(editable=True, resizable=True)
     gb.configure_grid_options(stopEditingWhenCellsLoseFocus=False)
+    
     gb.configure_column(
         "Tanggal",
         editable=True,
@@ -217,9 +225,9 @@ with tab1:
     gb.configure_column("Akun", header_name="Akun (contoh: Perlengkapan)")
     gb.configure_column("Debit (Rp)", type=["numericColumn"], valueFormatter="value ? value.toLocaleString() : ''")
     gb.configure_column("Kredit (Rp)", type=["numericColumn"], valueFormatter="value ? value.toLocaleString() : ''")
-
+    
     grid_options = gb.build()
-
+    
     grid_response = AgGrid(
         st.session_state.data,
         gridOptions=grid_options,
@@ -232,18 +240,19 @@ with tab1:
         key="aggrid_jurnal",
         reload_data=False
     )
-
+    
+    # Update session_state dari AgGrid
     new_df = pd.DataFrame(grid_response["data"])
     if "Tanggal" in new_df.columns:
         new_df["Tanggal"] = new_df["Tanggal"].astype(str).str.strip()
         new_df["Tanggal"] = new_df["Tanggal"].apply(parse_date_safe)
         new_df["Tanggal"] = new_df["Tanggal"].apply(lambda x: x.isoformat() if x else "")
-        
-    if not new_df.equals(st.session_state.data):
-        st.session_state.data = new_df.copy()
-
-    df_clean = new_df[new_df["Keterangan"].astype(str).str.strip() != ""]
-
+    st.session_state.data = new_df.copy()
+    st.session_state.aggrid_jurnal = new_df.copy()
+    
+    # Hitung total dan tampilkan
+    df_clean = st.session_state.data[st.session_state.data["Keterangan"].astype(str).str.strip() != ""]
+    
     if not df_clean.empty:
         total_debit = df_clean["Debit (Rp)"].sum()
         total_kredit = df_clean["Kredit (Rp)"].sum()
@@ -255,41 +264,18 @@ with tab1:
             "Kredit (Rp)": [total_kredit],
         })
         df_final = pd.concat([df_clean, total_row], ignore_index=True)
-
+    
         st.write("### 📊 Hasil Jurnal")
         df_final_display = df_final.copy()
         df_final_display.index = range(1, len(df_final_display) + 1)
         df_final_display.index.name = "No"
     
-        
         st.dataframe(df_final_display.style.format({
             "Debit (Rp)": format_rupiah,
             "Kredit (Rp)": format_rupiah
         }))
-        
-        def buat_pdf(df):
-            pdf = FPDF()
-            pdf.add_page()
-            pdf.set_font("Arial", size=12)
-            pdf.cell(200, 10, txt="Jurnal Umum BUMDes", ln=True, align="C")
-            pdf.ln(8)
-
-            col_width = 190 / len(df.columns)
-            for col in df.columns:
-                pdf.cell(col_width, 10, col, border=1, align="C")
-            pdf.ln()
-
-            pdf.set_font("Arial", size=10)
-            for _, row in df.iterrows():
-                for item in row:
-                    pdf.cell(col_width, 8, str(item), border=1, align="C")
-                pdf.ln()
-
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                pdf.output(tmp.name)
-                tmp.seek(0)
-                return tmp.read()
-
+    
+        # PDF
         pdf_data = buat_pdf(df_final)
         st.download_button(
             "📥 Download PDF",
