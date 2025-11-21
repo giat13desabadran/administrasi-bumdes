@@ -882,11 +882,11 @@ with tab3:
 with tab4:
     st.header("📊 Laporan Keuangan BUMDes")
     
-    # Ambil periode dari Tab 1
-    bulan_laporan = st.session_state.get('bulan')
-    tahun_laporan = st.session_state.get('tahun')
+    # Ambil periode dari Tab 
+    bulan_neraca = st.session_state.get('bulan')
+    tahun_neraca = st.session_state.get('tahun')
 
-    if not bulan_laporan or not tahun_laporan:
+    if not bulan_neraca or not tahun_neraca:
         st.warning("Periode belum dipilih di Tab 1.")
     else:
         bulan_dict = {
@@ -895,69 +895,73 @@ with tab4:
             "07": "Juli",    "08": "Agustus",  "09": "September",
             "10": "Oktober", "11": "November", "12": "Desember"
         }
-        st.subheader(f"Periode: {bulan_dict[bulan_laporan]} {tahun_laporan}")
+        st.subheader(f"Periode: {bulan_dict[bulan_neraca]} {tahun_neraca}")
 
         # Ambil buku besar TERFILTER periode
-        bb_periode = buat_buku_besar_periode(bulan_laporan, tahun_laporan)
+        bb_periode = buat_buku_besar_periode(bulan_neraca, tahun_neraca)
 
-    # Counter refresh
-    if "laporan_refresh" not in st.session_state:
-        st.session_state.laporan_refresh = 0
-    
-    # Inisialisasi laba_bersih di session_state
-    if "laba_bersih" not in st.session_state:
-        st.session_state.laba_bersih = 0
+        # Jika Buku Besar kosong → tampilkan info dan jangan lanjut
+    if not st.session_state.buku_besar:
+        st.info("ℹ️ Belum ada data untuk Laporan Keuangan pada periode ini. Silakan isi Jurnal Umum terlebih dahulu.")
 
-    # ========================================
-    # AUTO-LOAD DARI NERACA SALDO (SEKALI SAJA)
-    # ========================================
-    if "pendapatan_loaded" not in st.session_state:
-        st.session_state.pendapatan_loaded = False
-        st.info("ℹ️ Belum ada data untuk Neraca Saldo pada periode ini. Silakan isi Jurnal Umum terlebih dahulu.")
+    else:
+        # Counter refresh
+        if "laporan_refresh" not in st.session_state:
+            st.session_state.laporan_refresh = 0
+        
+        # Inisialisasi laba_bersih di session_state
+        if "laba_bersih" not in st.session_state:
+            st.session_state.laba_bersih = 0
     
-    if not st.session_state.pendapatan_loaded:
-        df_neraca = st.session_state.neraca_saldo[
-            st.session_state.neraca_saldo["Akun"].astype(str).str.strip() != ""
-        ]
+        # ========================================
+        # AUTO-LOAD DARI NERACA SALDO (SEKALI SAJA)
+        # ========================================
+        if "pendapatan_loaded" not in st.session_state:
+            st.session_state.pendapatan_loaded = False
         
-        # Clear data lama
-        st.session_state.pendapatan = pd.DataFrame([{"Jenis Pendapatan": "", "Debit (Rp)": 0, "Kredit (Rp)": 0}])
-        st.session_state.beban = pd.DataFrame([{"Jenis Beban": "", "Debit (Rp)": 0, "Kredit (Rp)": 0}])
-        st.session_state.aktiva_lancar = pd.DataFrame([{"Item": "", "Jumlah (Rp)": 0}])
-        st.session_state.aktiva_tetap = pd.DataFrame([{"Item": "", "Jumlah (Rp)": 0}])
-        st.session_state.kewajiban = pd.DataFrame([{"Item": "", "Jumlah (Rp)": 0}])
-        st.session_state.modal_data = {"modal_awal": 0}
-        
-        # Auto-populate dari Neraca Saldo
-        for _, row in df_neraca.iterrows():
-            nama_akun = str(row["Akun"]).lower()
-            debit = row["Debit (Rp)"] if pd.notna(row["Debit (Rp)"]) else 0
-            kredit = row["Kredit (Rp)"] if pd.notna(row["Kredit (Rp)"]) else 0
+        if not st.session_state.pendapatan_loaded:
+            df_neraca = st.session_state.neraca_saldo[
+                st.session_state.neraca_saldo["Akun"].astype(str).str.strip() != ""
+            ]
             
-            if "pendapatan" in nama_akun or "penjualan" in nama_akun:
-                new_row = pd.DataFrame([{"Jenis Pendapatan": row["Akun"], "Debit (Rp)": 0, "Kredit (Rp)": kredit}])
-                st.session_state.pendapatan = pd.concat([st.session_state.pendapatan, new_row], ignore_index=True)
+            # Clear data lama
+            st.session_state.pendapatan = pd.DataFrame([{"Jenis Pendapatan": "", "Debit (Rp)": 0, "Kredit (Rp)": 0}])
+            st.session_state.beban = pd.DataFrame([{"Jenis Beban": "", "Debit (Rp)": 0, "Kredit (Rp)": 0}])
+            st.session_state.aktiva_lancar = pd.DataFrame([{"Item": "", "Jumlah (Rp)": 0}])
+            st.session_state.aktiva_tetap = pd.DataFrame([{"Item": "", "Jumlah (Rp)": 0}])
+            st.session_state.kewajiban = pd.DataFrame([{"Item": "", "Jumlah (Rp)": 0}])
+            st.session_state.modal_data = {"modal_awal": 0}
             
-            elif "beban" in nama_akun or "biaya" in nama_akun:
-                new_row = pd.DataFrame([{"Jenis Beban": row["Akun"], "Debit (Rp)": debit, "Kredit (Rp)": 0}])
-                st.session_state.beban = pd.concat([st.session_state.beban, new_row], ignore_index=True)
+            # Auto-populate dari Neraca Saldo
+            for _, row in df_neraca.iterrows():
+                nama_akun = str(row["Akun"]).lower()
+                debit = row["Debit (Rp)"] if pd.notna(row["Debit (Rp)"]) else 0
+                kredit = row["Kredit (Rp)"] if pd.notna(row["Kredit (Rp)"]) else 0
+                
+                if "pendapatan" in nama_akun or "penjualan" in nama_akun:
+                    new_row = pd.DataFrame([{"Jenis Pendapatan": row["Akun"], "Debit (Rp)": 0, "Kredit (Rp)": kredit}])
+                    st.session_state.pendapatan = pd.concat([st.session_state.pendapatan, new_row], ignore_index=True)
+                
+                elif "beban" in nama_akun or "biaya" in nama_akun:
+                    new_row = pd.DataFrame([{"Jenis Beban": row["Akun"], "Debit (Rp)": debit, "Kredit (Rp)": 0}])
+                    st.session_state.beban = pd.concat([st.session_state.beban, new_row], ignore_index=True)
+                
+                elif "kas" in nama_akun or "perlengkapan" in nama_akun or "piutang" in nama_akun:
+                    new_row = pd.DataFrame([{"Item": row["Akun"], "Jumlah (Rp)": debit}])
+                    st.session_state.aktiva_lancar = pd.concat([st.session_state.aktiva_lancar, new_row], ignore_index=True)
+                
+                elif "peralatan" in nama_akun or "gedung" in nama_akun or "kendaraan" in nama_akun:
+                    new_row = pd.DataFrame([{"Item": row["Akun"], "Jumlah (Rp)": debit}])
+                    st.session_state.aktiva_tetap = pd.concat([st.session_state.aktiva_tetap, new_row], ignore_index=True)
+                
+                elif "modal" in nama_akun:
+                    st.session_state.modal_data["modal_awal"] = kredit
+                
+                elif "hutang" in nama_akun or "utang" in nama_akun:
+                    new_row = pd.DataFrame([{"Item": row["Akun"], "Jumlah (Rp)": kredit}])
+                    st.session_state.kewajiban = pd.concat([st.session_state.kewajiban, new_row], ignore_index=True)
             
-            elif "kas" in nama_akun or "perlengkapan" in nama_akun or "piutang" in nama_akun:
-                new_row = pd.DataFrame([{"Item": row["Akun"], "Jumlah (Rp)": debit}])
-                st.session_state.aktiva_lancar = pd.concat([st.session_state.aktiva_lancar, new_row], ignore_index=True)
-            
-            elif "peralatan" in nama_akun or "gedung" in nama_akun or "kendaraan" in nama_akun:
-                new_row = pd.DataFrame([{"Item": row["Akun"], "Jumlah (Rp)": debit}])
-                st.session_state.aktiva_tetap = pd.concat([st.session_state.aktiva_tetap, new_row], ignore_index=True)
-            
-            elif "modal" in nama_akun:
-                st.session_state.modal_data["modal_awal"] = kredit
-            
-            elif "hutang" in nama_akun or "utang" in nama_akun:
-                new_row = pd.DataFrame([{"Item": row["Akun"], "Jumlah (Rp)": kredit}])
-                st.session_state.kewajiban = pd.concat([st.session_state.kewajiban, new_row], ignore_index=True)
-        
-        st.session_state.pendapatan_loaded = True
+            st.session_state.pendapatan_loaded = True
 
     # === SUB-TABS ===
     subtab1, subtab2, subtab3 = st.tabs([
