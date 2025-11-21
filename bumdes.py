@@ -173,93 +173,80 @@ with tab1:
             format_func=lambda x: x[1]
         )[0]
     with col2:
-        tahun_selected = st.number_input(
-            "Tahun", min_value=2000, max_value=2100, value=pd.Timestamp.now().year, step=1
-        )
-
-    # --- Tombol tambah baris ---
+        tahun_selected = st.number_input("Tahun", min_value=2000, max_value=2100, value=pd.Timestamp.now().year, step=1)
+    
+    # Tombol tambah baris
     if st.button("➕ Tambah Baris Jurnal", key="tambah_jurnal"):
-        new_row = pd.DataFrame([{
-            "Tanggal": pd.NaT,
-            "Keterangan": "",
-            "Akun": "",
-            "Debit (Rp)": 0,
-            "Kredit (Rp)": 0
-        }])
+        new_row = pd.DataFrame([{"Tanggal": "", "Keterangan": "", "Akun": "", "Debit (Rp)": 0, "Kredit (Rp)": 0}])
         st.session_state.data = pd.concat([st.session_state.data, new_row], ignore_index=True)
-
-    # --- AgGrid ---
-    df_ag = st.session_state.data.copy()
-    df_ag["Tanggal"] = pd.to_datetime(df_ag["Tanggal"], errors="coerce")  # parse tanggal
-    st.session_state.data = create_aggrid(df_ag, key_suffix="jurnal", height=320)
-
-    df_total_calc = st.session_state.data.copy()
-    for col in ["Debit (Rp)", "Kredit (Rp)"]:
-        df_total_calc[col] = pd.to_numeric(df_total_calc[col], errors="coerce").fillna(0)
-
-    # --- Cek apakah ada data ---
-    if not df_total_calc.empty:
-        total_debit = df_total_calc["Debit (Rp)"].sum()
-        total_kredit = df_total_calc["Kredit (Rp)"].sum()
-
-        # --- Tambahkan baris TOTAL untuk display ---
-        df_display = df_total_calc.copy()
-        total_row = pd.DataFrame([{
-            "Tanggal": "",
-            "Keterangan": "TOTAL",
-            "Akun": "",
-            "Debit (Rp)": total_debit,
-            "Kredit (Rp)": total_kredit
-        }])
-        df_display = pd.concat([df_display, total_row], ignore_index=True)
-        df_display.index = range(1, len(df_display)+1)
-        df_display.index.name = "No"
+    
+    # AgGrid
+    st.session_state.data = create_aggrid(st.session_state.data, key_suffix="jurnal", height=320)
+    
+    # Filter baris valid
+    df_clean = st.session_state.data[st.session_state.data["Keterangan"].astype(str).str.strip() != ""]
+    
+    if not df_clean.empty:
+        total_debit = df_clean["Debit (Rp)"].sum()
+        total_kredit = df_clean["Kredit (Rp)"].sum()
+        total_row = pd.DataFrame({
+            "Tanggal": [""],
+            "Keterangan": ["TOTAL"],
+            "Akun": [""],
+            "Debit (Rp)": [total_debit],
+            "Kredit (Rp)": [total_kredit],
+        })
+        df_final = pd.concat([df_clean, total_row], ignore_index=True)
 
         st.write("### 📊 Hasil Jurnal")
-        st.dataframe(df_display.style.format({
+        df_final_display = df_final.copy()
+        df_final_display.index = range(1, len(df_final_display)+1)
+        df_final_display.index.name = "No"
+        st.dataframe(df_final_display.style.format({
             "Debit (Rp)": format_rupiah,
             "Kredit (Rp)": format_rupiah
         }))
 
         # --- PDF ---
         def buat_pdf(df, bulan, tahun):
+            import calendar
             pdf = FPDF()
             pdf.add_page()
             pdf.set_font("Arial", size=12)
-
+            
             bulan_dict = {
-                "01": "Januari", "02": "Februari", "03": "Maret", "04": "April",
-                "05": "Mei", "06": "Juni", "07": "Juli", "08": "Agustus",
-                "09": "September", "10": "Oktober", "11": "November", "12": "Desember"
+                1: "Januari", 2: "Februari", 3: "Maret", 4: "April", 5: "Mei",
+                6: "Juni", 7: "Juli", 8: "Agustus", 9: "September",
+                10: "Oktober", 11: "November", 12: "Desember"
             }
-            bulan_nama = bulan_dict.get(str(bulan), "Unknown")
-
+            try:
+                bulan_nama = bulan_dict.get(int(bulan), calendar.month_name[int(bulan)])
+            except:
+                bulan_nama = "Unknown"
+            
             pdf.cell(200, 10, txt=f"Jurnal Umum BUMDes - {bulan_nama} {tahun}", ln=True, align="C")
             pdf.ln(8)
-
+        
             col_width = 190 / len(df.columns)
             pdf.set_font("Arial", size=10, style="B")
             for col in df.columns:
                 pdf.cell(col_width, 10, col, border=1, align="C")
             pdf.ln()
-
+        
             pdf.set_font("Arial", size=9)
             for _, row in df.iterrows():
-                for col in df.columns:
-                    item = row[col]
-                    if col in ["Debit (Rp)", "Kredit (Rp)"]:
-                        item = format_rupiah(item)
-                    elif pd.isna(item):
-                        item = ""
+                for item in row:
+                    if isinstance(item, (int, float)):
+                        item = f"{item:,.0f}".replace(",", ".")
                     pdf.cell(col_width, 8, str(item), border=1, align="C")
                 pdf.ln()
-
+        
             with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                 pdf.output(tmp.name)
                 tmp.seek(0)
                 return tmp.read()
-
-        pdf_data = buat_pdf(df_display, bulan_selected, tahun_selected)
+        
+        pdf_data = buat_pdf(df_final, bulan_selected, tahun_selected)
         st.download_button(
             "📥 Download PDF",
             data=pdf_data,
@@ -269,6 +256,7 @@ with tab1:
         )
     else:
         st.warning("Belum ada data valid di tabel.")
+
         
 # ========================================
 # TAB 2: BUKU BESAR
