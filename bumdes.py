@@ -68,7 +68,7 @@ def create_aggrid(df, key_suffix, height=400):
         if "(Rp)" in col:
             gb.configure_column(col, type=["numericColumn"], valueFormatter="value ? value.toLocaleString() : ''")
 
-    gb.configure_column("Akun", hide=True, editable=False)
+    gb.configure_column(field="Akun", hide=True, editable=False)
     
     grid_options = gb.build()
     
