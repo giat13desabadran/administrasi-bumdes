@@ -631,27 +631,25 @@ with tab2:
 # ========================================
 with tab3:
     st.header("💵 Neraca Saldo BUMDes")
-
-    bulan_neraca = st.session_state['bulan']
-    tahun_neraca = st.session_state['tahun']
-    
-    bulan_dict = {
-        "01": "Januari", "02": "Februari", "03": "Maret",
-        "04": "April", "05": "Mei", "06": "Juni",
-        "07": "Juli", "08": "Agustus", "09": "September",
-        "10": "Oktober", "11": "November", "12": "Desember"
-    }
-
-    st.subheader(f"Periode: {bulan_dict[bulan_neraca]} {tahun_neraca}")
-
-    # Bangun Buku Besar periode
-    bb_periode = buat_buku_besar_periode(bulan_neraca, tahun_neraca)
+    # Ambil periode dari Tab 1
+    bulan_neraca = st.session_state.get('bulan')
+    tahun_neraca = st.session_state.get('tahun')
+    if not bulan_neraca or not tahun_neraca:
+        st.warning("Periode belum dipilih di Tab 1.")
+    else:
+        bulan_dict = {
+            "01": "Januari", "02": "Februari", "03": "Maret",
+            "04": "April",   "05": "Mei",      "06": "Juni",
+            "07": "Juli",    "08": "Agustus",  "09": "September",
+            "10": "Oktober", "11": "November", "12": "Desember"
+        }
+        st.subheader(f"Periode: {bulan_dict[bulan_neraca]} {tahun_neraca}")
+        # Ambil buku besar TERFILTER periode
+        bb_periode = buat_buku_besar_periode(bulan_neraca, tahun_neraca)
 
     # Jika Buku Besar kosong → tampilkan info dan hentikan tab
-    if bb_periode is None or len(bb_periode) == 0:
-        st.info("ℹ️ Belum ada data untuk Neraca Saldo pada periode ini. Silakan isi Jurnal Umum terlebih dahulu.")
-        #st.stop()
-    
+    if not bb_periode:
+            st.info("ℹ️ Belum ada data untuk Neraca Saldo pada periode ini. Silakan isi Jurnal Umum terlebih dahulu.")
     else:
         sync_neraca_from_bb(bb_periode, non_destructive=True)
         col1, col2, col3 = st.columns(3)
