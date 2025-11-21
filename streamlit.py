@@ -69,10 +69,6 @@ if "arus_kas_pendanaan" not in st.session_state:
 if "buku_besar" not in st.session_state:
     st.session_state.buku_besar = {}
 
-# Counter untuk memaksa refresh AgGrid
-if "aggrid_counter" not in st.session_state:
-    st.session_state.aggrid_counter = 0
-
 # === Fungsi format rupiah ===
 def format_rupiah(x):
     try:
@@ -89,19 +85,6 @@ def parse_date_safe(s):
     except:
         return None
         
-# === Fungsi untuk menambah baris baru ===
-def tambah_baris_jurnal():
-    new_row = pd.DataFrame([{"Tanggal": "", "Keterangan": "", "Akun": "", "Debit (Rp)": 0, "Kredit (Rp)": 0}])
-    st.session_state.data = pd.concat([st.session_state.data, new_row], ignore_index=True)
-    st.session_state.aggrid_counter += 1  # Increment counter untuk refresh AgGrid
-
-# === Fungsi untuk reset tabel ===
-def reset_tabel_jurnal():
-    st.session_state.data = pd.DataFrame([
-        {"Tanggal": "", "Keterangan": "", "Akun": "", "Debit (Rp)": 0, "Kredit (Rp)": 0}
-    ])
-    st.session_state.aggrid_counter += 1  # Increment counter untuk refresh AgGrid
-
 # === Fungsi AgGrid ===
 def create_aggrid(df, key_suffix, height=400):
     gb = GridOptionsBuilder.from_dataframe(df)
@@ -123,7 +106,7 @@ def create_aggrid(df, key_suffix, height=400):
         enable_enterprise_modules=False,
         theme="streamlit",
         height=height,
-        key=f"aggrid_{key_suffix}_{st.session_state.aggrid_counter}",  # Gunakan counter untuk refresh
+        key=f"aggrid_{key_suffix}",
         reload_data=False
     )
     
@@ -227,36 +210,31 @@ with tab1:
         )[0]  # ambil kode bulan "01"-"12"
     with col2:
         tahun_selected = st.number_input("Tahun", min_value=2000, max_value=2100, value=pd.Timestamp.now().year, step=1)
-    
-    # Tombol untuk mengelola tabel
-    col_btn1, col_btn2 = st.columns(2)
-    with col_btn1:
-        if st.button("➕ Tambah Baris Jurnal", key="tambah_jurnal", use_container_width=True):
-            tambah_baris_jurnal()
-            st.rerun()
-    with col_btn2:
-        if st.button("🔄 Reset Tabel", key="reset_jurnal", use_container_width=True):
-            reset_tabel_jurnal()
-            st.rerun()
+        
+    # Tombol tambah baris untuk Jurnal Umum
+    if st.button("➕ Tambah Baris Jurnal", key="tambah_jurnal"):
+        new_row = pd.DataFrame([{"Tanggal": "", "Keterangan": "", "Akun": "", "Debit (Rp)": 0, "Kredit (Rp)": 0}])
+        st.session_state.data = pd.concat([st.session_state.data, new_row], ignore_index=True)
+        st.rerun()
 
     # Konfigurasi Grid 
     gb = GridOptionsBuilder.from_dataframe(st.session_state.data)
     gb.configure_default_column(editable=True, resizable=True)
     gb.configure_grid_options(stopEditingWhenCellsLoseFocus=False)
     gb.configure_column(
-        "Tanggal",
-        editable=True,
-        cellEditor="agDateCellEditor",
-        valueFormatter="value ? new Date(value).toLocaleDateString('en-CA') : ''",
-        valueParser="""
-            function(params){
-                if (!params.newValue) return '';
-                // Konversi ke tanggal ISO
-                const d = new Date(params.newValue);
-                if (isNaN(d)) return '';
-                return d.toISOString().split('T')[0]; // "YYYY-MM-DD"
-            }
-        """
+    "Tanggal",
+    editable=True,
+    cellEditor="agDateCellEditor",
+    valueFormatter="value ? new Date(value).toLocaleDateString('en-CA') : ''",
+    valueParser="""
+        function(params){
+            if (!params.newValue) return '';
+            // Konversi ke tanggal ISO
+            const d = new Date(params.newValue);
+            if (isNaN(d)) return '';
+            return d.toISOString().split('T')[0]; // "YYYY-MM-DD"
+        }
+    """
     )
     gb.configure_column("Keterangan", header_name="Keterangan")
     gb.configure_column("Akun", header_name="Akun (contoh: Perlengkapan)")
@@ -274,32 +252,32 @@ with tab1:
         enable_enterprise_modules=False,
         theme="streamlit",
         height=320,
-        key=f"aggrid_jurnal_{st.session_state.aggrid_counter}",  # Gunakan counter untuk refresh
+        key="aggrid_jurnal",
         reload_data=False
     )
 
-    # Simpan perubahan dari AgGrid ke session state
     new_df = pd.DataFrame(grid_response["data"])
+    if "Tanggal" in new_df.columns:
+        # ubah semua jadi string dulu, strip whitespace
+        new_df["Tanggal"] = new_df["Tanggal"].astype(str).str.strip()
+        
+        # ubah string kosong atau "None"/"nan" menjadi NaN
+        new_df["Tanggal"] = new_df["Tanggal"].replace({"": pd.NA, "None": pd.NA, "nan": pd.NA})
+        
+        # konversi ke datetime, invalid jadi NaT
+        new_df["Tanggal"] = pd.to_datetime(new_df["Tanggal"], errors="coerce")
+        
+        # ubah NaT menjadi string kosong agar tampil di st.dataframe
+        new_df["Tanggal"] = new_df["Tanggal"].dt.strftime('%Y-%m-%d').fillna('')
+
     if not new_df.equals(st.session_state.data):
         st.session_state.data = new_df.copy()
-        st.rerun()  # Rerun untuk memastikan UI update
 
-    # Tampilkan data yang sudah diformat
-    df_clean = st.session_state.data[
-        (st.session_state.data["Keterangan"].astype(str).str.strip() != "") |
-        (st.session_state.data["Akun"].astype(str).str.strip() != "") |
-        (st.session_state.data["Debit (Rp)"] > 0) |
-        (st.session_state.data["Kredit (Rp)"] > 0)
-    ]
+    df_clean = new_df[new_df["Keterangan"].astype(str).str.strip() != ""]
 
     if not df_clean.empty:
         total_debit = df_clean["Debit (Rp)"].sum()
         total_kredit = df_clean["Kredit (Rp)"].sum()
-        
-        # Validasi keseimbangan debit dan kredit
-        if abs(total_debit - total_kredit) > 0.01:
-            st.error(f"⚠️ Jurnal tidak balance! Debit: {format_rupiah(total_debit)}, Kredit: {format_rupiah(total_kredit)}")
-        
         total_row = pd.DataFrame({
             "Tanggal": [""],
             "Keterangan": ["TOTAL"],
@@ -313,6 +291,7 @@ with tab1:
         df_final_display = df_final.copy()
         df_final_display.index = range(1, len(df_final_display) + 1)
         df_final_display.index.name = "No"
+    
         
         st.dataframe(df_final_display.style.format({
             "Debit (Rp)": format_rupiah,
@@ -356,10 +335,8 @@ with tab1:
             for _, row in df.iterrows():
                 for item in row:
                     # Format angka jika nilai numerik
-                    if isinstance(item, (int, float)) and item != 0:
+                    if isinstance(item, (int, float)):
                         item = f"{item:,.0f}".replace(",", ".")
-                    elif isinstance(item, (int, float)) and item == 0:
-                        item = ""
                     pdf.cell(col_width, 8, str(item), border=1, align="C")
                 pdf.ln()
         
