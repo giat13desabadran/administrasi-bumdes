@@ -256,8 +256,16 @@ with tab1:
 
     new_df = pd.DataFrame(grid_response["data"])
     if "Tanggal" in new_df.columns:
+        # ubah semua menjadi string dulu, strip whitespace
+        new_df["Tanggal"] = new_df["Tanggal"].astype(str).str.strip()
+        
+        # ubah string kosong atau "None"/"nan" menjadi NaN
+        new_df["Tanggal"] = new_df["Tanggal"].replace({"None": None, "nan": None, "": None})
+        
+        # konversi ke datetime, errors='coerce' → invalid jadi NaT
         new_df["Tanggal"] = pd.to_datetime(new_df["Tanggal"], errors="coerce").dt.date
-        # ganti None/NaT dengan string kosong kalau mau tampil
+        
+        # optional: ubah NaT menjadi string kosong supaya tampil di st.dataframe
         new_df["Tanggal"] = new_df["Tanggal"].apply(lambda x: x.isoformat() if x is not None else "")
 
 
