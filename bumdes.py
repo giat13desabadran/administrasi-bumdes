@@ -368,8 +368,8 @@ with tab1:
         mime="application/pdf",
         use_container_width=True
     )
-    else:
-        st.warning("Belum ada data valid di tabel.")        
+else:
+    st.warning("Belum ada data valid di tabel.")        
 # ========================================
 # TAB 2: BUKU BESAR
 # ========================================
