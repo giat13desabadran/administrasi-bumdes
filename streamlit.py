@@ -195,12 +195,27 @@ with tab1:
     st.header("🧾 Jurnal Umum")
     st.info("💡 Tekan Enter sekali untuk menyimpan perubahan otomatis.")
 
+    # --- Input bulan dan tahun ---
+    col1, col2 = st.columns(2)
+    with col1:
+        bulan_selected = st.selectbox(
+            "Pilih Bulan", 
+            options=[
+                ("01", "Januari"), ("02", "Februari"), ("03", "Maret"),
+                ("04", "April"), ("05", "Mei"), ("06", "Juni"),
+                ("07", "Juli"), ("08", "Agustus"), ("09", "September"),
+                ("10", "Oktober"), ("11", "November"), ("12", "Desember")
+            ],
+            format_func=lambda x: x[1]
+        )[0]  # ambil kode bulan "01"-"12"
+    with col2:
+        tahun_selected = st.number_input("Tahun", min_value=2000, max_value=2100, value=pd.Timestamp.now().year, step=1)
+        
     # Tombol tambah baris untuk Jurnal Umum
     if st.button("➕ Tambah Baris Jurnal", key="tambah_jurnal"):
         new_row = pd.DataFrame([{"Tanggal": "", "Keterangan": "", "Akun": "", "Debit (Rp)": 0, "Kredit (Rp)": 0}])
         st.session_state.data = pd.concat([st.session_state.data, new_row], ignore_index=True)
         st.rerun()
-
 
     # Konfigurasi Grid 
     gb = GridOptionsBuilder.from_dataframe(st.session_state.data)
