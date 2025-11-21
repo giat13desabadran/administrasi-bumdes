@@ -201,14 +201,12 @@ with tab1:
             "Tanggal": "", "Keterangan": "", "Akun": "", "Debit (Rp)": 0, "Kredit (Rp)": 0
         }])
         st.session_state.data = pd.concat([st.session_state.data, new_row], ignore_index=True)
-        st.session_state.aggrid_jurnal = st.session_state.data.copy()
-        st.rerun()
 
     # Konfigurasi AgGrid
     gb = GridOptionsBuilder.from_dataframe(st.session_state.data)
     gb.configure_default_column(editable=True, resizable=True)
     gb.configure_grid_options(stopEditingWhenCellsLoseFocus=False)
-    
+
     gb.configure_column(
         "Tanggal",
         editable=True,
@@ -220,9 +218,19 @@ with tab1:
     gb.configure_column("Akun", header_name="Akun (contoh: Perlengkapan)")
     gb.configure_column("Debit (Rp)", type=["numericColumn"], valueFormatter="value ? value.toLocaleString() : ''")
     gb.configure_column("Kredit (Rp)", type=["numericColumn"], valueFormatter="value ? value.toLocaleString() : ''")
-    
+
     grid_options = gb.build()
-    
+
+    # Callback untuk update session_state
+    def update_jurnal(data):
+        df = pd.DataFrame(data)
+        if "Tanggal" in df.columns:
+            df["Tanggal"] = df["Tanggal"].astype(str).str.strip()
+            df["Tanggal"] = df["Tanggal"].apply(parse_date_safe)
+            df["Tanggal"] = df["Tanggal"].apply(lambda x: x.isoformat() if x else "")
+        st.session_state.data = df.copy()
+
+    # Render AgGrid dengan callback
     grid_response = AgGrid(
         st.session_state.data,
         gridOptions=grid_options,
@@ -236,24 +244,15 @@ with tab1:
         reload_data=False
     )
 
-    # Ambil data dari AgGrid
-    new_df = pd.DataFrame(grid_response["data"])
+    # Tombol simpan perubahan dari grid
+    if st.button("💾 Simpan Perubahan Jurnal"):
+        update_jurnal(grid_response["data"])
+        st.success("✅ Data jurnal berhasil diperbarui")
 
-    # Pastikan kolom Tanggal selalu string
-    if "Tanggal" in new_df.columns:
-        new_df["Tanggal"] = new_df["Tanggal"].astype(str).str.strip()
-        new_df["Tanggal"] = new_df["Tanggal"].apply(lambda x: pd.to_datetime(x, errors='coerce'))
-        new_df["Tanggal"] = new_df["Tanggal"].apply(lambda x: x.strftime("%Y-%m-%d") if pd.notnull(x) else "")
-
-    # Simpan ke session_state
-    st.session_state.data = new_df.copy()
-    st.session_state.aggrid_jurnal = new_df.copy()
-
-    # Filter baris yang valid
+    # Hitung total dan tampilkan
     df_clean = st.session_state.data[st.session_state.data["Keterangan"].astype(str).str.strip() != ""]
 
     if not df_clean.empty:
-        # Hitung total
         total_debit = df_clean["Debit (Rp)"].sum()
         total_kredit = df_clean["Kredit (Rp)"].sum()
         total_row = pd.DataFrame({
@@ -275,7 +274,7 @@ with tab1:
             "Kredit (Rp)": format_rupiah
         }))
 
-        # PDF
+        # Download PDF
         pdf_data = buat_pdf(df_final)
         st.download_button(
             "📥 Download PDF",
