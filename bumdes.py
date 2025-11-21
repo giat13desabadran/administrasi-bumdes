@@ -650,10 +650,9 @@ with tab3:
         bb_periode = buat_buku_besar_periode(bulan_neraca, tahun_neraca)
 
         # Jika Buku Besar kosong → tampilkan info dan jangan lanjut
-        if not bb_periode:
+        if not st.session_state.buku_besar:
             st.info("ℹ️ Belum ada data untuk Neraca Saldo pada periode ini. Silakan isi Jurnal Umum terlebih dahulu.")
         else:
-            # HANYA JALAN SAAT bb_periode ADA
             sync_neraca_from_bb(bb_periode, non_destructive=True)
 
             col1, col2, col3 = st.columns(3)
