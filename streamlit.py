@@ -11,7 +11,7 @@ st.title("📘 Sistem Akuntansi BUMDes")
 # === Inisialisasi data awal ===
 if "data" not in st.session_state:
     st.session_state.data = pd.DataFrame([
-        {"Tanggal": "", "Keterangan": "", "Ref": "", "Debit (Rp)": 0, "Kredit (Rp)": 0}
+        {"Tanggal": "", "Keterangan": "", "Akun": "", "Debit (Rp)": 0, "Kredit (Rp)": 0}
     ])
 
 if "neraca_saldo" not in st.session_state:
