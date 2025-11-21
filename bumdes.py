@@ -195,6 +195,8 @@ with tab1:
 
     if "grid_key" not in st.session_state:
         st.session_state.grid_key = 0
+    if "data" not in st.session_state:
+        st.session_state.data = pd.DataFrame(columns=["Tanggal", "Keterangan", "Ref", "Akun", "Debit (Rp)", "Kredit (Rp)"])
 
     # --- Input bulan dan tahun ---
     col1, col2 = st.columns(2)
@@ -208,9 +210,10 @@ with tab1:
             format_func=lambda x: x[1]
         )[0]
     with col2:
-        tahun_selected = st.number_input("Tahun", min_value=2000, max_value=2100, value=pd.Timestamp.now().year, step=1)
-    
-    # Fungsi untuk menambah baris
+        tahun_selected = st.number_input("Tahun", min_value=2000, max_value=2100, 
+                                         value=pd.Timestamp.now().year, step=1)
+
+    # --- Fungsi tambah baris ---
     def add_journal_row():
         new_row = pd.DataFrame({
             "Tanggal": [""], 
@@ -220,47 +223,44 @@ with tab1:
             "Debit (Rp)": [0], 
             "Kredit (Rp)": [0]
         })
-        # Simpan data yang ada dulu dari AgGrid
-        #if 'grid_response' in st.session_state:
-            #st.session_state.data = st.session_state.grid_response['data']
-        # Tambah baris baru
         st.session_state.data = pd.concat([st.session_state.data, new_row], ignore_index=True)
         st.session_state.grid_key += 1
-    
-    # Tombol tambah baris
+
     st.button("➕ Tambah Baris Jurnal", key="tambah_jurnal", on_click=add_journal_row)
-    
-    # Setup AgGrid
-    gb = GridOptionsBuilder.from_dataframe(st.session_state.data)
+
+    # --- Buat versi display tanpa kolom Akun ---
+    df_display = st.session_state.data.drop(columns=["Akun"], errors="ignore")
+
+    # --- Setup AgGrid ---
+    gb = GridOptionsBuilder.from_dataframe(df_display)
     gb.configure_default_column(editable=True, resizable=True)
     gb.configure_grid_options(stopEditingWhenCellsLoseFocus=True)
-    
-    for col in st.session_state.data.columns:
+    for col in df_display.columns:
         if "(Rp)" in col:
-            gb.configure_column(col, type=["numericColumn"], valueFormatter="value ? value.toLocaleString() : ''")
-    
+            gb.configure_column(col, type=["numericColumn"], 
+                                valueFormatter="value ? value.toLocaleString() : ''")
     grid_options = gb.build()
-    
-    # Render AgGrid
+
     grid_response = AgGrid(
-        st.session_state.data,
+        df_display,
         gridOptions=grid_options,
         update_mode=GridUpdateMode.VALUE_CHANGED,
         fit_columns_on_grid_load=True,
         allow_unsafe_jscode=True,
-        enable_enterprise_modules=False,
         theme="streamlit",
         height=320,
         key=f"jurnal_grid_{st.session_state.grid_key}",
         reload_data=True
     )
-    
-    # Simpan data dari grid ke session state
-    st.session_state.data = grid_response['data']
-    
-   # Tampilkan data yang sudah difilter
+
+    # --- Sinkronisasi perubahan dari grid ke data asli ---
+    for idx, row in grid_response['data'].iterrows():
+        for col in row.index:
+            if col in st.session_state.data.columns:
+                st.session_state.data.at[idx, col] = row[col]
+
+    # --- Filter data valid ---
     df_clean = st.session_state.data[st.session_state.data["Keterangan"].astype(str).str.strip() != ""]
-    
     if not df_clean.empty:
         total_debit = df_clean["Debit (Rp)"].sum()
         total_kredit = df_clean["Kredit (Rp)"].sum()
@@ -273,18 +273,13 @@ with tab1:
             "Kredit (Rp)": [total_kredit],
         })
         df_final = pd.concat([df_clean, total_row], ignore_index=True)
-    
-        # === Hasil Jurnal (tanpa kolom Akun) + Export PDF ===
-        st.write("### 📊 Hasil Jurnal")
-        
-        # Sembunyikan kolom Akun hanya untuk tampilan/ekspor (data asli tetap utuh)
-        df_final_display = df_final.drop(columns=[c for c in ["Akun"] if c in df_final.columns]).copy()
-        
-        # Penomoran baris untuk tampilan
+
+        # --- Tampilkan tabel final tanpa kolom Akun ---
+        df_final_display = df_final.drop(columns=["Akun"], errors="ignore").copy()
         df_final_display.index = range(1, len(df_final_display) + 1)
         df_final_display.index.name = "No"
-        
-        # Tampilkan tabel hasil (tanpa kolom Akun)
+
+        st.write("### 📊 Hasil Jurnal")
         st.dataframe(
             df_final_display.style.format({
                 "Debit (Rp)": format_rupiah,
@@ -292,74 +287,8 @@ with tab1:
             }),
             use_container_width=True
         )
-        
+
         # --- PDF ---
-        def buat_pdf(df, bulan, tahun):
-            import calendar
-            pdf = FPDF(orientation='P', unit='mm', format='A4')
-            pdf.add_page()
-            pdf.set_font("Arial", size=12)
-        
-            # Nama bulan
-            bulan_dict = {
-                1: "Januari", 2: "Februari", 3: "Maret", 4: "April", 5: "Mei",
-                6: "Juni", 7: "Juli", 8: "Agustus", 9: "September",
-                10: "Oktober", 11: "November", 12: "Desember"
-            }
-            try:
-                bulan_nama = bulan_dict.get(int(bulan), calendar.month_name[int(bulan)])
-            except Exception:
-                bulan_nama = "Unknown"
-        
-            # Judul
-            pdf.cell(0, 10, txt=f"Jurnal Umum BUMDes - {bulan_nama} {tahun}", ln=True, align="C")
-            pdf.ln(4)
-        
-            # Lebar kolom (total ~190mm area tulis)
-            cols = list(df.columns)
-            preset_widths = {
-                "Tanggal": 25,
-                "Keterangan": 90,
-                "Ref": 20,
-                "Debit (Rp)": 27.5,
-                "Kredit (Rp)": 27.5
-            }
-            if all(c in preset_widths for c in cols):
-                col_widths = [preset_widths[c] for c in cols]
-            else:
-                col_widths = [190 / len(cols)] * len(cols)  # fallback bagi rata
-        
-            # Alignment per kolom
-            def col_align(name):
-                if "(Rp)" in name or name in {"Debit (Rp)", "Kredit (Rp)", "Jumlah", "Jumlah (Rp)"}:
-                    return "R"
-                if name in {"Tanggal", "Ref"}:
-                    return "C"
-                return "L"
-        
-            # Header
-            pdf.set_font("Arial", size=10, style="B")
-            for i, col in enumerate(cols):
-                pdf.cell(col_widths[i], 9, col, border=1, align="C")
-            pdf.ln()
-        
-            # Isi
-            pdf.set_font("Arial", size=9)
-            for _, row in df.iterrows():
-                for i, col in enumerate(cols):
-                    val = row[col]
-                    if isinstance(val, (int, float)):
-                        val = f"{val:,.0f}".replace(",", ".")  # format ribuan
-                    pdf.cell(col_widths[i], 8, str(val), border=1, align=col_align(col))
-                pdf.ln()
-        
-            # Kembalikan bytes PDF
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                pdf.output(tmp.name)
-                tmp.seek(0)
-                return tmp.read()
-        
-        # Penting: gunakan df_final_display (tanpa kolom Akun) untuk PDF
         pdf_data = buat_pdf(df_final_display, bulan_selected, tahun_selected)
         st.download_button(
             "📥 Download PDF",
@@ -368,7 +297,6 @@ with tab1:
             mime="application/pdf",
             use_container_width=True
         )
-    
     else:
         st.warning("Belum ada data valid di tabel.")
     
