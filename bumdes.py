@@ -512,24 +512,24 @@ with tab2:
 
     # Perbarui buku besar penuh dari jurnal
     st.session_state.buku_besar = buat_buku_besar()
+    # Ambil periode dari Tab 1 (yang sudah di-set ke session_state)
+    bulan_bukubesar = st.session_state.get('bulan')
+    tahun_bukubesar = st.session_state.get('tahun')
+    if not bulan_bukubesar or not tahun_bukubesar:
+        st.warning("Periode belum dipilih di Tab 1.")
+    else:
+        # Hanya TAMPILKAN periode yang dipilih di Tab 1
+        bulan_dict = {
+            "01": "Januari", "02": "Februari", "03": "Maret",
+            "04": "April",   "05": "Mei",      "06": "Juni",
+            "07": "Juli",    "08": "Agustus",  "09": "September",
+            "10": "Oktober", "11": "November", "12": "Desember"
+        }
+        st.subheader(f"Periode: {bulan_dict[bulan_bukubesar]} {tahun_bukubesar}")
+        # Ambil buku besar TERFILTER periode
+        bb_periode = buat_buku_besar_periode(bulan_bukubesar, tahun_bukubesar)
 
-    # Ambil periode dari Tab 1
-    bulan_bukubesar = st.session_state['bulan']
-    tahun_bukubesar = st.session_state['tahun']
-
-    bulan_dict = {
-        "01": "Januari", "02": "Februari", "03": "Maret",
-        "04": "April",   "05": "Mei",      "06": "Juni",
-        "07": "Juli",    "08": "Agustus",  "09": "September",
-        "10": "Oktober", "11": "November", "12": "Desember"
-    }
-
-    st.subheader(f"Periode: {bulan_dict[bulan_bukubesar]} {tahun_bukubesar}")
-
-    # Ambil buku besar khusus periode
-    bb_periode = buat_buku_besar_periode(bulan_bukubesar, tahun_bukubesar)
-
-    if bb_periode is None or len(bb_periode) == 0:
+    if not bb_periode:
         st.info("ℹ️ Belum ada data untuk buku besar pada periode ini. Silakan isi Jurnal Umum terlebih dahulu.")
         #st.stop()
     
