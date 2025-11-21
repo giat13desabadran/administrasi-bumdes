@@ -115,12 +115,10 @@ def create_aggrid(df, key_suffix, height=400):
 # === Fungsi untuk membuat buku besar ===
 def buat_buku_besar():
     # Pastikan kolom numeric benar
-    st.session_state.data["Debit (Rp)"] = pd.to_numeric(
-        st.session_state.data["Debit (Rp)"], errors="coerce"
-    ).fillna(0)
-    st.session_state.data["Kredit (Rp)"] = pd.to_numeric(
-        st.session_state.data["Kredit (Rp)"], errors="coerce"
-    ).fillna(0)
+    for col in ["Debit (Rp)", "Kredit (Rp)"]:
+        st.session_state.data[col] = pd.to_numeric(
+            st.session_state.data[col], errors="coerce"
+        ).fillna(0)
 
     buku_besar = {}
 
@@ -138,8 +136,10 @@ def buat_buku_besar():
                 "transaksi": []
             }
 
-        debit = row["Debit (Rp)"]
-        kredit = row["Kredit (Rp)"]
+        # Paksa debit dan kredit jadi float
+        debit = float(row.get("Debit (Rp)", 0) or 0)
+        kredit = float(row.get("Kredit (Rp)", 0) or 0)
+
         transaksi = {
             "tanggal": row.get("Tanggal", ""),
             "keterangan": row.get("Keterangan", ""),
