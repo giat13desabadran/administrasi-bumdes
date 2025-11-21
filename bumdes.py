@@ -611,7 +611,21 @@ sync_neraca_from_bukubesar(non_destructive=True)
 # ========================================
 with tab3:
     st.header("💵 Neraca Saldo BUMDes")
+
+    # INFO
+    #st.info("💡 Neraca Saldo di bawah ini disinkron otomatis dari Buku Besar. ")
+
+    # Bangun Buku Besar khusus periode yang dipilih
+    bb_periode = buat_buku_besar_periode(bulan_neraca, tahun_neraca)
     
+    # Auto-sync 
+    sync_neraca_from_bb(bb_periode, non_destructive=True)
+
+    # Cek kalau Buku Besar periode ini kosong
+    if bb_periode is None or len(bb_periode) == 0:
+        st.info("ℹ️ Belum ada data untuk neraca saldo. Silakan isi Jurnal Umum terlebih dahulu.")
+        st.stop()   # ← hentikan eksekusi tab agar tidak lanjut ke bawah
+
     # --- Selector Periode ---
     col1, col2 = st.columns(2)
     bulan_dict = {
@@ -635,20 +649,6 @@ with tab3:
             "Tahun", min_value=2000, max_value=2100, value=2025, step=1, key="tahun_neraca"
         )
     st.subheader(f"Periode: {bulan_dict[bulan_neraca]} {tahun_neraca}")
-
-    # INFO
-    st.info("💡 Neraca Saldo di bawah ini disinkron otomatis dari Buku Besar. ")
-
-    # Bangun Buku Besar khusus periode yang dipilih
-    bb_periode = buat_buku_besar_periode(bulan_neraca, tahun_neraca)
-    
-    # Auto-sync 
-    sync_neraca_from_bb(bb_periode, non_destructive=True)
-
-    # Cek kalau Buku Besar periode ini kosong
-    if bb_periode is None or len(bb_periode) == 0:
-        st.info("ℹ️ Belum ada data untuk neraca saldo. Silakan isi Jurnal Umum terlebih dahulu.")
-        st.stop()   # ← hentikan eksekusi tab agar tidak lanjut ke bawah
     
     # Tombol kontrol
     col1, col2, col3 = st.columns(3)
@@ -935,7 +935,7 @@ with tab4:
     
     st.subheader(f"Periode: {bulan_dict[bulan_laporan]} {tahun_laporan}")
     
-    st.info("💡 Data otomatis diambil dari Neraca Saldo, namun Anda tetap bisa mengedit manual di tabel yang tersedia.")
+    #st.info("💡 Data otomatis diambil dari Neraca Saldo, namun Anda tetap bisa mengedit manual di tabel yang tersedia.")
 
     # Counter refresh
     if "laporan_refresh" not in st.session_state:
