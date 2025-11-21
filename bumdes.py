@@ -79,25 +79,11 @@ def format_rupiah(x):
         return x
 
 # Fungsi format tanggal
-def ensure_date(value):
-    if value is None:
-        return None
-    if isinstance(value, (pd.Timestamp, datetime)):
-        return value.date() if isinstance(value, datetime) else value.date()
-    if isinstance(value, str):
-        value = value.strip()
-    if value == "":
-        return None
-    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d-%m-%Y"):
-        try:
-            return datetime.strptime(value, fmt).date()
-        except Exception:
-            continue
+def parse_date_safe(s):
     try:
-        return pd.to_datetime(value, errors="coerce").date()
-    except Exception:
+        return pd.to_datetime(s, format="%Y-%m-%d", errors="raise").date()
+    except:
         return None
-    return None
         
 # === Fungsi AgGrid ===
 def create_aggrid(df, key_suffix, height=400):
@@ -173,6 +159,7 @@ def buat_buku_besar():
             buku_besar[akun_no]["nama_akun"] = row["Nama Akun"]
     
     return buku_besar
+
 
 # === Styling ===
 st.markdown("""
