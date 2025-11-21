@@ -290,6 +290,7 @@ with tab1:
         )
     else:
         st.warning("Belum ada data valid di tabel.")
+        
 # ========================================
 # TAB 2: BUKU BESAR
 # ========================================
@@ -300,17 +301,22 @@ with tab2:
     st.session_state.buku_besar = buat_buku_besar()
     
     if not st.session_state.buku_besar:
-        st.info("ℹ️ Belum ada data untuk buku besar. Silakan tambah data di Jurnal Umum dan isi kolom 'Akun' dengan jenis akun.")
+        st.info("ℹ️ Belum ada data untuk buku besar. Silakan tambah data di Jurnal Umum dan isi kolom 'Akun'.")
     else:
-        # Pilih akun untuk ditampilkan
-        akun_options = [f"{k} - {v['nama_akun']}" for k, v in st.session_state.buku_besar.items()]
-        selected_akun = st.selectbox("Pilih Akun:", akun_options, key="pilih_akun")
+        # Pilihan akun (hanya nama akun, tanpa nomor akun)
+        akun_options = [v["nama_akun"] for v in st.session_state.buku_besar.values()]
+        selected_akun = st.selectbox("Pilih Akun:", akun_options)
+
+        # Cari key akun berdasarkan nama akun
+        akun_no = None
+        for key, value in st.session_state.buku_besar.items():
+            if value["nama_akun"] == selected_akun:
+                akun_no = key
+                break
         
-        # Ekstrak nomor akun dari pilihan
-        akun_no = selected_akun.split(" - ")[0]
         akun_data = st.session_state.buku_besar[akun_no]
         
-        # Tampilkan info saldo
+        # Hitung saldo
         saldo = akun_data["debit"] - akun_data["kredit"]
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -318,14 +324,15 @@ with tab2:
         with col2:
             st.metric("Total Kredit", format_rupiah(akun_data["kredit"]))
         with col3:
-            st.metric("Saldo Akhir", format_rupiah(saldo), delta_color="inverse" if saldo < 0 else "normal")
+            st.metric("Saldo Akhir", format_rupiah(saldo), 
+                      delta_color="inverse" if saldo < 0 else "normal")
         
-        # Tampilkan tabel transaksi
+        # Tabel transaksi
         if akun_data["transaksi"]:
             df_transaksi = pd.DataFrame(akun_data["transaksi"])
-            st.write(f"### Transaksi Akun {akun_no} - {akun_data['nama_akun']}")
+            st.write(f"### Transaksi Akun {akun_data['nama_akun']}")
             
-            # Tambahkan nomor urut
+            # Nomor urut
             df_transaksi_display = df_transaksi.copy()
             df_transaksi_display.index = range(1, len(df_transaksi_display) + 1)
             df_transaksi_display.index.name = "No"
@@ -335,14 +342,16 @@ with tab2:
                 "kredit": format_rupiah
             }))
             
-            # Tombol download PDF
-            def buat_pdf_buku_besar(akun_no, akun_data):
+            # PDF Buku Besar
+            def buat_pdf_buku_besar(akun_data):
                 pdf = FPDF()
                 pdf.add_page()
+                
+                # Judul
                 pdf.set_font("Arial", 'B', 14)
-                pdf.cell(0, 10, txt=f"Buku Besar - Akun {akun_no}", ln=True, align="C")
+                pdf.cell(0, 10, txt=f"Buku Besar - {akun_data['nama_akun']}", ln=True, align="C")
+                
                 pdf.set_font("Arial", '', 12)
-                pdf.cell(0, 8, txt=f"Nama Akun: {akun_data['nama_akun']}", ln=True, align="C")
                 pdf.ln(5)
                 
                 # Info saldo
@@ -363,16 +372,16 @@ with tab2:
                 
                 # Isi tabel
                 pdf.set_font("Arial", '', 9)
-                for transaksi in akun_data["transaksi"]:
-                    pdf.cell(col_widths[0], 8, str(transaksi["tanggal"]), border=1, align="C")
+                for trx in akun_data["transaksi"]:
+                    pdf.cell(col_widths[0], 8, str(trx["tanggal"]), border=1, align="C")
                     
-                    keterangan = str(transaksi["keterangan"])
-                    if len(keterangan) > 30:
-                        keterangan = keterangan[:27] + "..."
-                    pdf.cell(col_widths[1], 8, keterangan, border=1, align="L")
+                    ket = str(trx["keterangan"])
+                    if len(ket) > 30:
+                        ket = ket[:27] + "..."
+                    pdf.cell(col_widths[1], 8, ket, border=1)
                     
-                    pdf.cell(col_widths[2], 8, format_rupiah(transaksi["debit"]), border=1, align="R")
-                    pdf.cell(col_widths[3], 8, format_rupiah(transaksi["kredit"]), border=1, align="R")
+                    pdf.cell(col_widths[2], 8, format_rupiah(trx["debit"]), border=1, align="R")
+                    pdf.cell(col_widths[3], 8, format_rupiah(trx["kredit"]), border=1, align="R")
                     pdf.ln()
                 
                 pdf.ln(5)
@@ -384,14 +393,16 @@ with tab2:
                     tmp.seek(0)
                     return tmp.read()
 
-            pdf_buku_besar = buat_pdf_buku_besar(akun_no, akun_data)
+            pdf_buku_besar = buat_pdf_buku_besar(akun_data)
+            
             st.download_button(
                 "📥 Download PDF Buku Besar",
                 data=pdf_buku_besar,
-                file_name=f"buku_besar_akun_{akun_no}.pdf",
+                file_name=f"buku_besar_{akun_data['nama_akun']}.pdf",
                 mime="application/pdf",
                 use_container_width=True
             )
+        
         else:
             st.info("Tidak ada transaksi untuk akun ini.")
 
