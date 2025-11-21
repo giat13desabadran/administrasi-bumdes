@@ -611,9 +611,14 @@ sync_neraca_from_bukubesar(non_destructive=True)
 # ========================================
 with tab3:
     st.header("💵 Neraca Saldo BUMDes")
-
-    # INFO
-    #st.info("💡 Neraca Saldo di bawah ini disinkron otomatis dari Buku Besar. ")
+    
+    col1, col2 = st.columns(2)
+    bulan_dict = {
+        "01": "Januari", "02": "Februari", "03": "Maret",
+        "04": "April", "05": "Mei", "06": "Juni",
+        "07": "Juli", "08": "Agustus", "09": "September",
+        "10": "Oktober", "11": "November", "12": "Desember"
+    }
 
     with col1:
         bulan_neraca = st.selectbox(
@@ -625,22 +630,25 @@ with tab3:
             format_func=lambda x: x[1],
             key="bulan_neraca"
         )[0]
+
     with col2:
         tahun_neraca = st.number_input(
             "Tahun", min_value=2000, max_value=2100, value=2025, step=1, key="tahun_neraca"
         )
+
     st.subheader(f"Periode: {bulan_dict[bulan_neraca]} {tahun_neraca}")
 
-    # Bangun Buku Besar khusus periode yang dipilih
+    # Bangun Buku Besar periode
     bb_periode = buat_buku_besar_periode(bulan_neraca, tahun_neraca)
-    
-    # Auto-sync 
+
+    # Sync otomatis
     sync_neraca_from_bb(bb_periode, non_destructive=True)
 
-    # Cek kalau Buku Besar periode ini kosong
+    # Jika Buku Besar kosong → tampilkan info dan hentikan tab
     if bb_periode is None or len(bb_periode) == 0:
         st.info("ℹ️ Belum ada data untuk neraca saldo. Silakan isi Jurnal Umum terlebih dahulu.")
-        st.stop()   # ← hentikan eksekusi tab agar tidak lanjut ke bawah
+        st.stop()
+
 
     # --- Selector Periode ---
     col1, col2 = st.columns(2)
