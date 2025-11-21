@@ -622,11 +622,11 @@ with tab2:
         else:
             st.info("Tidak ada transaksi untuk akun ini.")
             
-if "neraca_saldo" not in st.session_state:
-    st.session_state.neraca_saldo = pd.DataFrame([
-        {"Ref": "", "Akun": "", "Debit (Rp)": 0, "Kredit (Rp)": 0}
-    ])
-sync_neraca_from_bukubesar(non_destructive=True)
+#if "neraca_saldo" not in st.session_state:
+#       st.session_state.neraca_saldo = pd.DataFrame([
+#       {"Ref": "", "Akun": "", "Debit (Rp)": 0, "Kredit (Rp)": 0}
+#    ])
+# sync_neraca_from_bukubesar(non_destructive=True)
 # ========================================
 # TAB 3: NERACA SALDO (REVISI LENGKAP)
 # ========================================
