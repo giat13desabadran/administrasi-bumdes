@@ -375,6 +375,10 @@ with tab1:
         )[0]
     with col2:
         tahun_selected = st.number_input("Tahun", min_value=2000, max_value=2100, value=pd.Timestamp.now().year, step=1)
+
+    st.session_state['bulan'] = bulan_selected
+    st.session_state['tahun'] = tahun_selected
+
     
     # Fungsi untuk menambah baris
     def add_journal_row():
@@ -505,12 +509,29 @@ with tab1:
 # ========================================
 with tab2:
     st.header("📚 Buku Besar")
-    
-    # Perbarui buku besar berdasarkan jurnal
+
+    # Perbarui buku besar penuh dari jurnal
     st.session_state.buku_besar = buat_buku_besar()
-    
-    if not st.session_state.buku_besar:
-        st.info("ℹ️ Belum ada data untuk buku besar. Silakan isi Jurnal Umum terlebih dahulu.")
+
+    # Ambil periode dari Tab 1
+    bulan_bukubesar = st.session_state['bulan']
+    tahun_bukubesar = st.session_state['tahun']
+
+    bulan_dict = {
+        "01": "Januari", "02": "Februari", "03": "Maret",
+        "04": "April",   "05": "Mei",      "06": "Juni",
+        "07": "Juli",    "08": "Agustus",  "09": "September",
+        "10": "Oktober", "11": "November", "12": "Desember"
+    }
+
+    st.subheader(f"Periode: {bulan_dict[bulan_bukubesar]} {tahun_bukubesar}")
+
+    # Ambil buku besar khusus periode
+    bb_periode = buat_buku_besar_periode(bulan_bukubesar, tahun_bukubesar)
+
+    if bb_periode is None or len(bb_periode) == 0:
+        st.info("ℹ️ Belum ada data untuk buku besar pada periode ini. Silakan isi Jurnal Umum terlebih dahulu.")
+        st.stop()
     
     else:
         # Buat pilihan berdasarkan nama akun asli
@@ -611,30 +632,16 @@ sync_neraca_from_bukubesar(non_destructive=True)
 # ========================================
 with tab3:
     st.header("💵 Neraca Saldo BUMDes")
+
+    bulan_neraca = st.session_state['bulan']
+    tahun_neraca = st.session_state['tahun']
     
-    col1, col2 = st.columns(2)
     bulan_dict = {
         "01": "Januari", "02": "Februari", "03": "Maret",
         "04": "April", "05": "Mei", "06": "Juni",
         "07": "Juli", "08": "Agustus", "09": "September",
         "10": "Oktober", "11": "November", "12": "Desember"
     }
-
-    with col1:
-        bulan_neraca = st.selectbox(
-            "Pilih Bulan", 
-            options=[("01", "Januari"), ("02", "Februari"), ("03", "Maret"),
-                     ("04", "April"), ("05", "Mei"), ("06", "Juni"),
-                     ("07", "Juli"), ("08", "Agustus"), ("09", "September"),
-                     ("10", "Oktober"), ("11", "November"), ("12", "Desember")],
-            format_func=lambda x: x[1],
-            key="bulan_neraca"
-        )[0]
-
-    with col2:
-        tahun_neraca = st.number_input(
-            "Tahun", min_value=2000, max_value=2100, value=2025, step=1, key="tahun_neraca"
-        )
 
     st.subheader(f"Periode: {bulan_dict[bulan_neraca]} {tahun_neraca}")
 
@@ -649,17 +656,6 @@ with tab3:
         st.info("ℹ️ Belum ada data untuk neraca saldo. Silakan isi Jurnal Umum terlebih dahulu.")
         st.stop()
 
-
-    # --- Selector Periode ---
-    col1, col2 = st.columns(2)
-    bulan_dict = {
-        "01": "Januari", "02": "Februari", "03": "Maret",
-        "04": "April", "05": "Mei", "06": "Juni",
-        "07": "Juli", "08": "Agustus", "09": "September",
-        "10": "Oktober", "11": "November", "12": "Desember"
-    }
-
-    
     # Tombol kontrol
     col1, col2, col3 = st.columns(3)
     
