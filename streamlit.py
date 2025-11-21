@@ -11,7 +11,7 @@ st.title("📘 Sistem Akuntansi BUMDes")
 # === Inisialisasi data awal ===
 if "data" not in st.session_state:
     st.session_state.data = pd.DataFrame([
-        {"Tanggal": "", "Keterangan": "", "Akun": "", "Debit (Rp)": 0, "Kredit (Rp)": 0}
+        {"Tanggal": None, "Keterangan": "", "Akun": "", "Debit (Rp)": 0, "Kredit (Rp)": 0}
     ])
 
 if "neraca_saldo" not in st.session_state:
@@ -78,6 +78,24 @@ def format_rupiah(x):
     except Exception:
         return x
 
+# === Fungsi untuk konversi tanggal ===
+def convert_date(date_obj):
+    """Konversi tanggal dari berbagai format ke string YYYY-MM-DD"""
+    if pd.isna(date_obj) or date_obj is None:
+        return None
+    try:
+        if isinstance(date_obj, str):
+            # Coba parsing string ke date
+            return pd.to_datetime(date_obj).strftime('%Y-%m-%d')
+        elif isinstance(date_obj, (datetime, pd.Timestamp)):
+            return date_obj.strftime('%Y-%m-%d')
+        elif hasattr(date_obj, 'to_dateString'):
+            # Jika dari JavaScript Date object
+            return date_obj.to_dateString()
+        return str(date_obj)
+    except:
+        return None
+        
 # === Fungsi AgGrid ===
 def create_aggrid(df, key_suffix, height=400):
     gb = GridOptionsBuilder.from_dataframe(df)
@@ -194,7 +212,8 @@ with tab1:
         st.session_state.data = pd.concat([st.session_state.data, new_row], ignore_index=True)
         st.rerun()
 
-    # Konfigurasi Grid - PERBAIKAN: Syntax error pada konfigurasi tanggal
+
+    # Konfigurasi Grid 
     gb = GridOptionsBuilder.from_dataframe(st.session_state.data)
     gb.configure_default_column(editable=True, resizable=True)
     gb.configure_grid_options(stopEditingWhenCellsLoseFocus=False)
@@ -202,12 +221,12 @@ with tab1:
         "Tanggal",
         header_name="Tanggal",
         editable=True,
-        cellEditor="agDateCellEditor",
+        cellEditor="agDateStringCellEditor",
         cellEditorParams={
-            "useFormatter": False,
-            "minValidYear": 1900
+            "useFormatter": True
         },
-        valueFormatter="value ? new Date(value).toLocaleDateString('en-CA') : ''"
+        valueFormatter="value ? new Date(value).toLocaleDateString('en-CA') : ''",
+        valueParser="function(params) { return params.newValue; }"
     )
     gb.configure_column("Keterangan", header_name="Keterangan")
     gb.configure_column("Akun", header_name="Akun (contoh: Perlengkapan)")
@@ -230,10 +249,8 @@ with tab1:
     )
 
     new_df = pd.DataFrame(grid_response["data"])
-    new_df["Tanggal"] = pd.to_datetime(
-        new_df["Tanggal"],
-        errors="coerce"
-    ).dt.date
+    if "Tanggal" in new_df.columns:
+        new_df["Tanggal"] = new_df["Tanggal"].apply(convert_date)
 
     if not new_df.equals(st.session_state.data):
         st.session_state.data = new_df.copy()
