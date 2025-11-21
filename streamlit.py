@@ -177,7 +177,7 @@ st.markdown("""
 tab1, tab2, tab3, tab4 = st.tabs([
     "🧾 Jurnal Umum", 
     "📚 Buku Besar", 
-    "⚖️ Neraca Saldo",
+    "💵 Neraca Saldo",
     "📊 Laporan Keuangan"
 ])
 
@@ -199,7 +199,7 @@ with tab1:
     gb.configure_grid_options(stopEditingWhenCellsLoseFocus=False)
     gb.configure_column("Tanggal", header_name="Tanggal (YYYY-MM-DD)")
     gb.configure_column("Keterangan", header_name="Keterangan")
-    gb.configure_column("Ref", header_name="Ref (contoh: 101)")
+    gb.configure_column("Akun", header_name="Akun (contoh: Perlengkapan)")
     gb.configure_column("Debit (Rp)", type=["numericColumn"], valueFormatter="value ? value.toLocaleString() : ''")
     gb.configure_column("Kredit (Rp)", type=["numericColumn"], valueFormatter="value ? value.toLocaleString() : ''")
 
@@ -231,7 +231,7 @@ with tab1:
         total_row = pd.DataFrame({
             "Tanggal": [""],
             "Keterangan": ["TOTAL"],
-            "Ref": [""],
+            "Akun": [""],
             "Debit (Rp)": [total_debit],
             "Kredit (Rp)": [total_kredit],
         })
@@ -291,7 +291,7 @@ with tab2:
     st.session_state.buku_besar = buat_buku_besar()
     
     if not st.session_state.buku_besar:
-        st.info("ℹ️ Belum ada data untuk buku besar. Silakan tambah data di Jurnal Umum dan isi kolom 'Ref' dengan nomor akun.")
+        st.info("ℹ️ Belum ada data untuk buku besar. Silakan tambah data di Jurnal Umum dan isi kolom 'Akun' dengan jenis akun.")
     else:
         # Pilih akun untuk ditampilkan
         akun_options = [f"{k} - {v['nama_akun']}" for k, v in st.session_state.buku_besar.items()]
@@ -390,7 +390,7 @@ with tab2:
 # TAB 3: NERACA SALDO (OPTIMIZED FOR STREAMLIT CLOUD)
 # ========================================
 with tab3:
-    st.header("⚖️ Neraca Saldo BUMDes")
+    st.header("💵 Neraca Saldo BUMDes")
     st.subheader("Periode: Januari 2025")
     st.info("💡 Masukkan data saldo akhir dari setiap akun di Buku Besar. Klik 'Tambah Baris' untuk menambah data baru.")
 
