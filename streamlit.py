@@ -221,18 +221,19 @@ with tab1:
     gb.configure_default_column(editable=True, resizable=True)
     gb.configure_grid_options(stopEditingWhenCellsLoseFocus=False)
     gb.configure_column(
-        "Tanggal",
-        editable=True,
-        cellEditor="agDateCellEditor",
-        valueFormatter="value ? new Date(value).toLocaleDateString('en-CA') : ''",
-        valueParser="""
-            function(params){
-                if (!params.newValue) return null;
-                const d = new Date(params.newValue);
-                if (isNaN(d)) return null;
-                return d.toISOString().split('T')[0];
-            }
-        """
+    "Tanggal",
+    editable=True,
+    cellEditor="agDateCellEditor",
+    valueFormatter="value ? new Date(value).toLocaleDateString('en-CA') : ''",
+    valueParser="""
+        function(params){
+            if (!params.newValue) return '';
+            // Konversi ke tanggal ISO
+            const d = new Date(params.newValue);
+            if (isNaN(d)) return '';
+            return d.toISOString().split('T')[0]; // "YYYY-MM-DD"
+        }
+    """
     )
     gb.configure_column("Keterangan", header_name="Keterangan")
     gb.configure_column("Akun", header_name="Akun (contoh: Perlengkapan)")
@@ -256,17 +257,14 @@ with tab1:
 
     new_df = pd.DataFrame(grid_response["data"])
     if "Tanggal" in new_df.columns:
-        # ubah semua menjadi string dulu, strip whitespace
-        new_df["Tanggal"] = new_df["Tanggal"].astype(str).str.strip()
+    # strip dan ubah string kosong menjadi None
+        new_df["Tanggal"] = new_df["Tanggal"].astype(str).str.strip().replace({"": None, "None": None, "nan": None})
         
-        # ubah string kosong atau "None"/"nan" menjadi NaN
-        new_df["Tanggal"] = new_df["Tanggal"].replace({"None": None, "nan": None, "": None})
-        
-        # konversi ke datetime, errors='coerce' → invalid jadi NaT
+        # konversi ke datetime.date, NaT → None
         new_df["Tanggal"] = pd.to_datetime(new_df["Tanggal"], errors="coerce").dt.date
         
-        # optional: ubah NaT menjadi string kosong supaya tampil di st.dataframe
-        new_df["Tanggal"] = new_df["Tanggal"].apply(lambda x: x.isoformat() if x is not None else "")
+        # optional: supaya st.dataframe tampil cantik, ubah None → ""
+        new_df["Tanggal"] = new_df["Tanggal"].apply(lambda x: x.isoformat() if x else "")
 
 
     if not new_df.equals(st.session_state.data):
