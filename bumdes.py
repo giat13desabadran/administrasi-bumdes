@@ -114,6 +114,7 @@ def create_aggrid(df, key_suffix, height=400):
 
 # === Fungsi untuk membuat buku besar ===
 def buat_buku_besar():
+    # Pastikan kolom numeric benar
     st.session_state.data["Debit (Rp)"] = pd.to_numeric(
         st.session_state.data["Debit (Rp)"], errors="coerce"
     ).fillna(0)
@@ -121,7 +122,6 @@ def buat_buku_besar():
         st.session_state.data["Kredit (Rp)"], errors="coerce"
     ).fillna(0)
 
-    # Inisialisasi struktur buku besar
     buku_besar = {}
 
     for _, row in st.session_state.data.iterrows():
@@ -140,11 +140,17 @@ def buat_buku_besar():
 
         debit = row["Debit (Rp)"]
         kredit = row["Kredit (Rp)"]
+        transaksi = {
+            "tanggal": row.get("Tanggal", ""),
+            "keterangan": row.get("Keterangan", ""),
+            "debit": debit,
+            "kredit": kredit
+        }
 
         if debit > 0:
             buku_besar[akun]["transaksi"].append({
-                "tanggal": row["Tanggal"],
-                "keterangan": row["Keterangan"],
+                "tanggal": row.get("Tanggal", ""),
+                "keterangan": row.get("Keterangan", ""),
                 "debit": debit,
                 "kredit": 0
             })
@@ -152,21 +158,21 @@ def buat_buku_besar():
 
         if kredit > 0:
             buku_besar[akun]["transaksi"].append({
-                "tanggal": row["Tanggal"],
-                "keterangan": row["Keterangan"],
+                "tanggal": row.get("Tanggal", ""),
+                "keterangan": row.get("Keterangan", ""),
                 "debit": 0,
                 "kredit": kredit
             })
             buku_besar[akun]["kredit"] += kredit
 
-    # Tambahkan nama akun dari neraca saldo jika tersedia
+    # Tambahkan nama akun dari neraca saldo
     for _, row in st.session_state.neraca_saldo.iterrows():
         akun_no = str(row["No Akun"]).strip()
         if akun_no and akun_no in buku_besar:
             buku_besar[akun_no]["nama_akun"] = row["Nama Akun"]
 
-    
     return buku_besar
+
 
 # === Styling ===
 st.markdown("""
