@@ -225,15 +225,15 @@ with tab1:
     editable=True,
     cellEditor="agDateCellEditor",
     valueFormatter="value ? new Date(value).toLocaleDateString('en-CA') : ''",
-    valueParser="""
-        function(params){
-            if (!params.newValue) return null;
-            const d = new Date(params.newValue);
-            if (isNaN(d)) return null;
-            return d.toISOString().split('T')[0];  // selalu "YYYY-MM-DD"
-        }
-        """
-    )
+    valueParser: `
+    function(params){
+        if (!params.newValue) return null;   
+        const d = new Date(params.newValue);
+        if (isNaN(d)) return null;          
+        return d.toISOString().split('T')[0]; 
+    }
+    `
+
     gb.configure_column("Keterangan", header_name="Keterangan")
     gb.configure_column("Akun", header_name="Akun (contoh: Perlengkapan)")
     gb.configure_column("Debit (Rp)", type=["numericColumn"], valueFormatter="value ? value.toLocaleString() : ''")
@@ -257,6 +257,9 @@ with tab1:
     new_df = pd.DataFrame(grid_response["data"])
     if "Tanggal" in new_df.columns:
         new_df["Tanggal"] = pd.to_datetime(new_df["Tanggal"], errors="coerce").dt.date
+        # ganti None/NaT dengan string kosong kalau mau tampil
+        new_df["Tanggal"] = new_df["Tanggal"].apply(lambda x: x.isoformat() if x is not None else "")
+
 
     if not new_df.equals(st.session_state.data):
         st.session_state.data = new_df.copy()
