@@ -112,10 +112,10 @@ def buat_buku_besar():
     
     # Proses setiap entri jurnal
     for _, row in st.session_state.data.iterrows():
-        if not row["Ref"] or not str(row["Ref"]).strip():
+        if not row["Akun"] or not str(row["Akun"]).strip():
             continue
             
-        akun = str(row["Ref"]).strip()
+        akun = str(row["Akun"]).strip()
         
         # Buat entri baru jika akun belum ada
         if akun not in buku_besar:
@@ -190,7 +190,7 @@ with tab1:
 
     # Tombol tambah baris untuk Jurnal Umum
     if st.button("➕ Tambah Baris Jurnal", key="tambah_jurnal"):
-        new_row = pd.DataFrame([{"Tanggal": "", "Keterangan": "", "Ref": "", "Debit (Rp)": 0, "Kredit (Rp)": 0}])
+        new_row = pd.DataFrame([{"Tanggal": "", "Keterangan": "", "Akun": "", "Debit (Rp)": 0, "Kredit (Rp)": 0}])
         st.session_state.data = pd.concat([st.session_state.data, new_row], ignore_index=True)
         st.rerun()
 
