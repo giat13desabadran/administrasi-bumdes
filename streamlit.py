@@ -190,7 +190,7 @@ with tab1:
 
     # Tombol tambah baris untuk Jurnal Umum
     if st.button("➕ Tambah Baris Jurnal", key="tambah_jurnal"):
-        new_row = pd.DataFrame([{"Tanggal": "", "Keterangan": "", "Akun": "", "Debit (Rp)": 0, "Kredit (Rp)": 0}])
+        new_row = pd.DataFrame([{"Tanggal": None, "Keterangan": "", "Akun": "", "Debit (Rp)": 0, "Kredit (Rp)": 0}])
         st.session_state.data = pd.concat([st.session_state.data, new_row], ignore_index=True)
         st.rerun()
 
@@ -204,7 +204,8 @@ with tab1:
         editable=True,
         cellEditor="agDateCellEditor",
         cellEditorParams={
-            "useFormatter": True
+            "useFormatter": False,
+            "minValidYear": 1900
         },
         valueFormatter="value ? new Date(value).toLocaleDateString('en-CA') : ''"
     )
@@ -229,6 +230,7 @@ with tab1:
     )
 
     new_df = pd.DataFrame(grid_response["data"])
+    new_df["Tanggal"] = pd.to_datetime(new_df["Tanggal"], errors="coerce").dt.date
     if not new_df.equals(st.session_state.data):
         st.session_state.data = new_df.copy()
 
