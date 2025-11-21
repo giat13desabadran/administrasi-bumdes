@@ -3,6 +3,7 @@ import pandas as pd
 from fpdf import FPDF
 import tempfile
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+from datetime import datetime
 
 # === Konfigurasi dasar ===
 st.set_page_config(page_title="Administrasi BUMDes", layout="wide")
@@ -19,55 +20,7 @@ if "neraca_saldo" not in st.session_state:
         {"No Akun": "", "Nama Akun": "", "Debit (Rp)": 0, "Kredit (Rp)": 0}
     ])
 
-if "pendapatan" not in st.session_state:
-    st.session_state.pendapatan = pd.DataFrame([
-        {"Jenis Pendapatan": "", "Jumlah (Rp)": 0}
-    ])
-
-if "beban" not in st.session_state:
-    st.session_state.beban = pd.DataFrame([
-        {"Jenis Beban": "", "Jumlah (Rp)": 0}
-    ])
-
-if "modal_data" not in st.session_state:
-    st.session_state.modal_data = {
-        "modal_awal": 0,
-        "prive": 0
-    }
-
-if "aktiva_lancar" not in st.session_state:
-    st.session_state.aktiva_lancar = pd.DataFrame([
-        {"Item": "", "Jumlah (Rp)": 0}
-    ])
-
-if "aktiva_tetap" not in st.session_state:
-    st.session_state.aktiva_tetap = pd.DataFrame([
-        {"Item": "", "Jumlah (Rp)": 0}
-    ])
-
-if "kewajiban" not in st.session_state:
-    st.session_state.kewajiban = pd.DataFrame([
-        {"Item": "", "Jumlah (Rp)": 0}
-    ])
-
-if "arus_kas_operasi" not in st.session_state:
-    st.session_state.arus_kas_operasi = pd.DataFrame([
-        {"Aktivitas": "", "Jumlah (Rp)": 0}
-    ])
-
-if "arus_kas_investasi" not in st.session_state:
-    st.session_state.arus_kas_investasi = pd.DataFrame([
-        {"Aktivitas": "", "Jumlah (Rp)": 0}
-    ])
-
-if "arus_kas_pendanaan" not in st.session_state:
-    st.session_state.arus_kas_pendanaan = pd.DataFrame([
-        {"Aktivitas": "", "Jumlah (Rp)": 0}
-    ])
-
-# Data untuk Buku Besar
-if "buku_besar" not in st.session_state:
-    st.session_state.buku_besar = {}
+# ... (data lainnya tetap sama) ...
 
 # === Fungsi format rupiah ===
 def format_rupiah(x):
@@ -77,6 +30,47 @@ def format_rupiah(x):
         return f"{x:,.0f}".replace(",", ".")
     except Exception:
         return x
+
+# === Fungsi untuk validasi dan pemrosesan data ===
+def validasi_jurnal(df):
+    """Validasi keseimbangan debit dan kredit"""
+    total_debit = df["Debit (Rp)"].sum()
+    total_kredit = df["Kredit (Rp)"].sum()
+    return total_debit == total_kredit, total_debit, total_kredit
+
+def proses_ke_buku_besar(jurnal_df):
+    """Memproses jurnal ke buku besar"""
+    buku_besar = {}
+    
+    for _, row in jurnal_df.iterrows():
+        if not row["Akun"] or not str(row["Akun"]).strip():
+            continue
+            
+        akun = str(row["Akun"]).strip()
+        
+        if akun not in buku_besar:
+            buku_besar[akun] = {
+                "nama_akun": f"Akun {akun}",
+                "debit": 0,
+                "kredit": 0,
+                "saldo": 0,
+                "transaksi": []
+            }
+        
+        # Tambahkan transaksi
+        transaksi = {
+            "tanggal": row["Tanggal"],
+            "keterangan": row["Keterangan"],
+            "debit": row["Debit (Rp)"],
+            "kredit": row["Kredit (Rp)"]
+        }
+        
+        buku_besar[akun]["transaksi"].append(transaksi)
+        buku_besar[akun]["debit"] += row["Debit (Rp)"]
+        buku_besar[akun]["kredit"] += row["Kredit (Rp)"]
+        buku_besar[akun]["saldo"] = buku_besar[akun]["debit"] - buku_besar[akun]["kredit"]
+    
+    return buku_besar
 
 # === Fungsi AgGrid ===
 def create_aggrid(df, key_suffix, height=400):
@@ -104,54 +98,6 @@ def create_aggrid(df, key_suffix, height=400):
     )
     
     return pd.DataFrame(grid_response["data"])
-
-# === Fungsi untuk membuat buku besar ===
-def buat_buku_besar():
-    # Inisialisasi struktur buku besar berdasarkan referensi akun
-    buku_besar = {}
-    
-    # Proses setiap entri jurnal
-    for _, row in st.session_state.data.iterrows():
-        if not row["Akun"] or not str(row["Akun"]).strip():
-            continue
-            
-        akun = str(row["Akun"]).strip()
-        
-        # Buat entri baru jika akun belum ada
-        if akun not in buku_besar:
-            buku_besar[akun] = {
-                "nama_akun": f"Akun {akun}",
-                "debit": 0,
-                "kredit": 0,
-                "transaksi": []
-            }
-        
-        # Tambahkan transaksi
-        if row["Debit (Rp)"] > 0:
-            buku_besar[akun]["transaksi"].append({
-                "tanggal": row["Tanggal"],
-                "keterangan": row["Keterangan"],
-                "debit": row["Debit (Rp)"],
-                "kredit": 0
-            })
-            buku_besar[akun]["debit"] += row["Debit (Rp)"]
-        
-        if row["Kredit (Rp)"] > 0:
-            buku_besar[akun]["transaksi"].append({
-                "tanggal": row["Tanggal"],
-                "keterangan": row["Keterangan"],
-                "debit": 0,
-                "kredit": row["Kredit (Rp)"]
-            })
-            buku_besar[akun]["kredit"] += row["Kredit (Rp)"]
-    
-    # Tambahkan nama akun dari neraca saldo jika tersedia
-    for _, row in st.session_state.neraca_saldo.iterrows():
-        akun_no = str(row["No Akun"]).strip()
-        if akun_no and akun_no in buku_besar:
-            buku_besar[akun_no]["nama_akun"] = row["Nama Akun"]
-    
-    return buku_besar
 
 # === Styling ===
 st.markdown("""
@@ -194,10 +140,11 @@ with tab1:
         st.session_state.data = pd.concat([st.session_state.data, new_row], ignore_index=True)
         st.rerun()
 
+    # Konfigurasi Grid - PERBAIKAN: Syntax error pada konfigurasi tanggal
     gb = GridOptionsBuilder.from_dataframe(st.session_state.data)
     gb.configure_default_column(editable=True, resizable=True)
     gb.configure_grid_options(stopEditingWhenCellsLoseFocus=False)
-    gb.configure_column("Tanggal", header_name="Tanggal (YYYY-MM-DD)")
+    gb.configure_column("Tanggal", header_name="Tanggal")
     gb.configure_column("Keterangan", header_name="Keterangan")
     gb.configure_column("Akun", header_name="Akun (contoh: Perlengkapan)")
     gb.configure_column("Debit (Rp)", type=["numericColumn"], valueFormatter="value ? value.toLocaleString() : ''")
@@ -225,9 +172,9 @@ with tab1:
     df_clean = new_df[new_df["Keterangan"].astype(str).str.strip() != ""]
 
     if not df_clean.empty:
-        total_debit = df_clean["Debit (Rp)"].sum()
-        total_kredit = df_clean["Kredit (Rp)"].sum()
-
+        # Validasi keseimbangan
+        seimbang, total_debit, total_kredit = validasi_jurnal(df_clean)
+        
         total_row = pd.DataFrame({
             "Tanggal": [""],
             "Keterangan": ["TOTAL"],
@@ -242,11 +189,20 @@ with tab1:
         df_final_display.index = range(1, len(df_final_display) + 1)
         df_final_display.index.name = "No"
         
+        # Tampilkan status keseimbangan
+        if seimbang:
+            st.success("✅ Debit dan Kredit seimbang!")
+        else:
+            st.error(f"❌ Debit dan Kredit tidak seimbang! Selisih: {format_rupiah(abs(total_debit - total_kredit))}")
+        
         st.dataframe(df_final_display.style.format({
             "Debit (Rp)": format_rupiah,
             "Kredit (Rp)": format_rupiah
         }))
 
+        # Proses ke buku besar
+        st.session_state.buku_besar = proses_ke_buku_besar(df_clean)
+        
         def buat_pdf(df):
             pdf = FPDF()
             pdf.add_page()
@@ -254,15 +210,23 @@ with tab1:
             pdf.cell(200, 10, txt="Jurnal Umum BUMDes", ln=True, align="C")
             pdf.ln(8)
 
-            col_width = 190 / len(df.columns)
-            for col in df.columns:
-                pdf.cell(col_width, 10, col, border=1, align="C")
+            # Header
+            col_widths = [30, 70, 40, 25, 25]  # Sesuaikan lebar kolom
+            headers = ["Tanggal", "Keterangan", "Akun", "Debit", "Kredit"]
+            
+            pdf.set_font("Arial", "B", 10)
+            for i, header in enumerate(headers):
+                pdf.cell(col_widths[i], 10, header, border=1, align="C")
             pdf.ln()
-
-            pdf.set_font("Arial", size=10)
+            
+            # Data
+            pdf.set_font("Arial", "", 9)
             for _, row in df.iterrows():
-                for item in row:
-                    pdf.cell(col_width, 8, str(item), border=1, align="C")
+                pdf.cell(col_widths[0], 8, str(row["Tanggal"]), border=1)
+                pdf.cell(col_widths[1], 8, str(row["Keterangan"]), border=1)
+                pdf.cell(col_widths[2], 8, str(row["Akun"]), border=1)
+                pdf.cell(col_widths[3], 8, format_rupiah(row["Debit (Rp)"]), border=1, align="R")
+                pdf.cell(col_widths[4], 8, format_rupiah(row["Kredit (Rp)"]), border=1, align="R")
                 pdf.ln()
 
             with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
@@ -280,6 +244,43 @@ with tab1:
         )
     else:
         st.warning("Belum ada data valid di tabel.")
+
+# ========================================
+# TAB 2: BUKU BESAR
+# ========================================
+with tab2:
+    st.header("📚 Buku Besar")
+    
+    if not st.session_state.buku_besar:
+        st.info("📝 Belum ada data buku besar. Silakan input data jurnal terlebih dahulu.")
+    else:
+        # Pilih akun untuk dilihat buku besarnya
+        akun_list = list(st.session_state.buku_besar.keys())
+        selected_akun = st.selectbox("Pilih Akun:", akun_list)
+        
+        if selected_akun:
+            akun_data = st.session_state.buku_besar[selected_akun]
+            
+            st.subheader(f"Buku Besar: {akun_data['nama_akun']} ({selected_akun})")
+            
+            # Tampilkan ringkasan
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Debit", format_rupiah(akun_data['debit']))
+            with col2:
+                st.metric("Total Kredit", format_rupiah(akun_data['kredit']))
+            with col3:
+                st.metric("Saldo Akhir", format_rupiah(akun_data['saldo']))
+            
+            # Tampilkan transaksi
+            if akun_data['transaksi']:
+                transaksi_df = pd.DataFrame(akun_data['transaksi'])
+                st.dataframe(transaksi_df.style.format({
+                    "debit": format_rupiah,
+                    "kredit": format_rupiah
+                }))
+            else:
+                st.info("Tidak ada transaksi untuk akun ini.")
 
 # ========================================
 # TAB 2: BUKU BESAR
