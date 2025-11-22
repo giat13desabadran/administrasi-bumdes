@@ -163,6 +163,7 @@ def buat_buku_besar():
 
 import json
 
+
 def _signature_buku_besar(bb: dict) -> str:
     # Buat tanda tangan sederhana untuk deteksi perubahan
     items = []
@@ -224,6 +225,61 @@ def sync_neraca_from_bukubesar(non_destructive: bool = True):
         ns = ns[ns["Ref"].astype(str).str.strip().isin(refs_bb)]
 
     st.session_state.neraca_saldo = ns.reset_index(drop=True)
+
+def buat_pdf_buku_besar(buku_besar):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=10)
+
+    pdf.set_font("Arial", 'B', 14)
+    pdf.cell(0, 10, txt="Buku Besar Semua Akun", ln=True, align="C")
+    pdf.ln(5)
+
+    for akun_no, akun_data in buku_besar.items():
+        # Judul akun
+        pdf.set_font("Arial", 'B', 12)
+        pdf.cell(0, 8, txt=f"Akun: {akun_data['nama_akun']}", ln=True)
+        
+        # Total debit/kredit
+        pdf.set_font("Arial", '', 10)
+        pdf.cell(0, 6, txt=f"Total Debit  : {format_rupiah(akun_data['debit'])}", ln=True)
+        pdf.cell(0, 6, txt=f"Total Kredit : {format_rupiah(akun_data['kredit'])}", ln=True)
+        pdf.ln(2)
+
+        # Header tabel transaksi
+        pdf.set_font("Arial", 'B', 10)
+        col_widths = [25, 60, 50, 50]
+        headers = ["Tanggal", "Keterangan", "Debit (Rp)", "Kredit (Rp)"]
+        for i, header in enumerate(headers):
+            pdf.cell(col_widths[i], 8, header, border=1, align="C")
+        pdf.ln()
+
+        # Isi tabel transaksi
+        pdf.set_font("Arial", '', 9)
+        for trx in akun_data.get("transaksi", []):
+            pdf.cell(col_widths[0], 8, str(trx["tanggal"]), border=1, align="C")
+
+            ket = str(trx["keterangan"])
+            if len(ket) > 30:
+                ket = ket[:27] + "..."
+            pdf.cell(col_widths[1], 8, ket, border=1, align="L")
+
+            pdf.cell(col_widths[2], 8, format_rupiah(trx["debit"]), border=1, align="R")
+            pdf.cell(col_widths[3], 8, format_rupiah(trx["kredit"]), border=1, align="R")
+            pdf.ln()
+
+        pdf.ln(5)  # Jeda antar akun
+
+    # Footer
+    pdf.set_font("Arial", 'I', 8)
+    pdf.cell(0, 5, txt="Dicetak dari Sistem Akuntansi BUMDes", ln=True, align="C")
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+        pdf.output(tmp.name)
+        tmp.seek(0)
+        return tmp.read()
+
+
 
 # === Styling AgGrid ===
 st.markdown("""
@@ -486,11 +542,11 @@ with tab2:
                     tmp.seek(0)
                     return tmp.read()
 
-            pdf_buku_besar = buat_pdf_buku_besar(akun_no, akun_data)
+            pdf_semua = buat_pdf_buku_besar_semua(st.session_state.buku_besar)
             st.download_button(
                 "📥 Download PDF Buku Besar",
-                data=pdf_buku_besar,
-                file_name=f"buku_besar_{akun_data['nama_akun']}.pdf",
+                data=pdf_semua,
+                file_name="buku_besar.pdf",
                 mime="application/pdf",
                 use_container_width=True
             )
