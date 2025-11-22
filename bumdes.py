@@ -496,52 +496,7 @@ with tab2:
                 "kredit": format_rupiah
             }))
 
-            # === PDF Buku Besar ===
-            def buat_pdf_buku_besar(akun_no, akun_data):
-                pdf = FPDF()
-                pdf.add_page()
-                pdf.set_font("Arial", 'B', 14)
-                pdf.cell(0, 10, txt=f"Buku Besar", ln=True, align="C")
-                pdf.set_font("Arial", '', 12)
-                pdf.cell(0, 8, txt=f"Akun: {akun_data['nama_akun']}", ln=True, align="C")
-                pdf.ln(5)
-
-                pdf.set_font("Arial", '', 10)
-                pdf.cell(0, 8, txt=f"Total Debit  : {format_rupiah(akun_data['debit'])}", ln=True)
-                pdf.cell(0, 8, txt=f"Total Kredit : {format_rupiah(akun_data['kredit'])}", ln=True)
-                pdf.ln(5)
-
-                # Header tabel
-                pdf.set_font("Arial", 'B', 10)
-                col_widths = [25, 60, 50, 50]
-                headers = ["Tanggal", "Keterangan", "Debit (Rp)", "Kredit (Rp)"]
-                for i, header in enumerate(headers):
-                    pdf.cell(col_widths[i], 10, header, border=1, align="C")
-                pdf.ln()
-
-                # Isi tabel
-                pdf.set_font("Arial", '', 9)
-                for trx in akun_data["transaksi"]:
-                    pdf.cell(col_widths[0], 8, str(trx["tanggal"]), border=1, align="C")
-
-                    ket = str(trx["keterangan"])
-                    if len(ket) > 30:
-                        ket = ket[:27] + "..."
-                    pdf.cell(col_widths[1], 8, ket, border=1, align="L")
-
-                    pdf.cell(col_widths[2], 8, format_rupiah(trx["debit"]), border=1, align="R")
-                    pdf.cell(col_widths[3], 8, format_rupiah(trx["kredit"]), border=1, align="R")
-                    pdf.ln()
-
-                pdf.ln(5)
-                pdf.set_font("Arial", 'I', 8)
-                pdf.cell(0, 5, txt="Dicetak dari Sistem Akuntansi BUMDes", ln=True, align="C")
-
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                    pdf.output(tmp.name)
-                    tmp.seek(0)
-                    return tmp.read()
-
+            
             pdf_semua = buat_pdf_buku_besar(st.session_state.buku_besar)
             st.download_button(
                 "📥 Download PDF Buku Besar",
