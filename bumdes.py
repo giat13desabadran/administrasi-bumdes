@@ -352,42 +352,79 @@ with tab1:
 
         # --- PDF ---
         def buat_pdf(df, bulan, tahun):
-            import calendar
-            pdf = FPDF()
-            pdf.add_page()
-            pdf.set_font("Arial", size=12)
-            
-            bulan_dict = {
-                1: "Januari", 2: "Februari", 3: "Maret", 4: "April", 5: "Mei",
-                6: "Juni", 7: "Juli", 8: "Agustus", 9: "September",
-                10: "Oktober", 11: "November", 12: "Desember"
-            }
-            try:
-                bulan_nama = bulan_dict.get(int(bulan), calendar.month_name[int(bulan)])
-            except:
-                bulan_nama = "Unknown"
-            
-            pdf.cell(200, 10, txt=f"Jurnal Umum BUMDes - {bulan_nama} {tahun}", ln=True, align="C")
-            pdf.ln(8)
+        import calendar
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", size=12)
         
-            col_width = 190 / len(df.columns)
-            pdf.set_font("Arial", size=10, style="B")
-            for col in df.columns:
-                pdf.cell(col_width, 10, col, border=1, align="C")
-            pdf.ln()
+        # Nama bulan
+        bulan_dict = {
+            1: "Januari", 2: "Februari", 3: "Maret", 4: "April", 5: "Mei",
+            6: "Juni", 7: "Juli", 8: "Agustus", 9: "September",
+            10: "Oktober", 11: "November", 12: "Desember"
+        }
+        try:
+            bulan_nama = bulan_dict.get(int(bulan), calendar.month_name[int(bulan)])
+        except:
+            bulan_nama = "Unknown"
         
-            pdf.set_font("Arial", size=9)
-            for _, row in df.iterrows():
-                for item in row:
-                    if isinstance(item, (int, float)):
-                        item = f"{item:,.0f}".replace(",", ".")
-                    pdf.cell(col_width, 8, str(item), border=1, align="C")
-                pdf.ln()
+        pdf.cell(200, 10, txt=f"Jurnal Umum BUMDes - {bulan_nama} {tahun}", ln=True, align="C")
+        pdf.ln(8)
         
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                pdf.output(tmp.name)
-                tmp.seek(0)
-                return tmp.read()
+        # Lebar kolom (Tanggal, Keterangan, Debit, Kredit)
+        col_widths = [25, 80, 40, 40]  # keterangan lebih lebar
+        line_height = 6
+    
+        # Header
+        pdf.set_font("Arial", size=10, style="B")
+        headers = ["Tanggal", "Keterangan", "Debit (Rp)", "Kredit (Rp)"]
+        for i, header in enumerate(headers):
+            pdf.cell(col_widths[i], line_height + 2, header, border=1, align="C")
+        pdf.ln()
+        
+        # Isi tabel
+        pdf.set_font("Arial", size=9)
+        for _, row in df.iterrows():
+            # Simpan posisi awal X, Y
+            x_start = pdf.get_x()
+            y_start = pdf.get_y()
+    
+            # Tanggal
+            pdf.multi_cell(col_widths[0], line_height, str(row["Tanggal"]), border=1, align="C")
+            x_after = x_start + col_widths[0]
+    
+            # Keterangan
+            pdf.set_xy(x_after, y_start)
+            pdf.multi_cell(col_widths[1], line_height, str(row["Keterangan"]), border=1, align="L")
+            x_after += col_widths[1]
+    
+            # Debit
+            pdf.set_xy(x_after, y_start)
+            debit_str = f"{row['Debit (Rp)']:,.0f}".replace(",", ".") if pd.notna(row['Debit (Rp)']) else "0"
+            pdf.multi_cell(col_widths[2], line_height, debit_str, border=1, align="R")
+            x_after += col_widths[2]
+    
+            # Kredit
+            pdf.set_xy(x_after, y_start)
+            kredit_str = f"{row['Kredit (Rp)']:,.0f}".replace(",", ".") if pd.notna(row['Kredit (Rp)']) else "0"
+            pdf.multi_cell(col_widths[3], line_height, kredit_str, border=1, align="R")
+    
+            # Pindah ke baris berikutnya sesuai tinggi terbesar
+            y_new = pdf.get_y()
+            pdf.set_y(y_new)
+    
+        # Footer
+        pdf.ln(5)
+        pdf.set_font("Arial", 'I', 8)
+        pdf.cell(0, 5, txt="Dicetak dari Sistem Akuntansi BUMDes", ln=True, align="C")
+    
+        # Simpan ke temp file
+        import tempfile
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            pdf.output(tmp.name)
+            tmp.seek(0)
+            return tmp.read()
+
         
         pdf_data = buat_pdf(df_final, bulan_selected, tahun_selected)
         st.download_button(
