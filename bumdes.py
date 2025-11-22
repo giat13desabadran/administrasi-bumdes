@@ -406,14 +406,17 @@ with tab2:
     # Perbarui buku besar berdasarkan jurnal
     st.session_state.buku_besar = buat_buku_besar()
     
-    if st.session_state.buku_besar:
-        # Buat label gabungan Ref - Nama Akun
+    if not st.session_state.buku_besar:
+        st.info("ℹ️ Belum ada data untuk buku besar. Silakan isi Jurnal Umum terlebih dahulu.")
+    
+    else:
+        # Buat label: "Akun No - Nama Akun"
         akun_labels = {k: f"{k} - {v['nama_akun']}" for k, v in st.session_state.buku_besar.items()}
         
-        # Selectbox menampilkan Ref - Nama Akun
+        # Selectbox menampilkan nama akun lengkap
         selected_label = st.selectbox("Pilih Akun:", akun_labels.values())
         
-        # Cari key Ref berdasarkan label yang dipilih
+        # Ambil key akun berdasarkan label
         akun_no = [k for k, v in akun_labels.items() if v == selected_label][0]
         akun_data = st.session_state.buku_besar[akun_no]
 
@@ -426,7 +429,7 @@ with tab2:
         # Tabel transaksi
         if akun_data["transaksi"]:
             df_transaksi = pd.DataFrame(akun_data["transaksi"])
-            st.write(f"### Transaksi Akun: {akun_labels[akun_no]}")
+            st.write(f"### Transaksi Akun: {akun_no} - {akun_data['nama_akun']}")
 
             df_transaksi_display = df_transaksi.copy()
             df_transaksi_display.index = range(1, len(df_transaksi_display) + 1)
@@ -437,7 +440,7 @@ with tab2:
                 "kredit": format_rupiah
             }))
 
-            # === PDF Buku Besar Semua Akun ===
+            # PDF semua akun
             def buat_pdf_buku_besar(buku_besar):
                 pdf = FPDF()
                 pdf.add_page()
@@ -447,10 +450,10 @@ with tab2:
                 pdf.cell(0, 10, txt="Buku Besar Semua Akun", ln=True, align="C")
                 pdf.ln(5)
 
-                for ref, akun_data in buku_besar.items():
-                    # Judul Ref - Nama Akun
+                for akun_no, akun_data in buku_besar.items():
+                    # Judul akun
                     pdf.set_font("Arial", 'B', 12)
-                    pdf.cell(0, 8, txt=f"{ref} - {akun_data['nama_akun']}", ln=True)
+                    pdf.cell(0, 8, txt=f"{akun_no} - {akun_data['nama_akun']}", ln=True)
                     
                     # Total debit/kredit
                     pdf.set_font("Arial", '', 10)
@@ -499,6 +502,8 @@ with tab2:
                 mime="application/pdf",
                 use_container_width=True
             )
+        else:
+            st.info("Tidak ada transaksi untuk akun ini.")
 
             
 # ========================================
