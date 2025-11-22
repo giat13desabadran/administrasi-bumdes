@@ -1175,11 +1175,13 @@ with tab4:
         # Input Modal
         modal_awal = st.number_input(
             "Modal Awal (Rp)", 
-            value=st.session_state.modal_data.get("modal_awal", 0), 
+            value=int(st.session_state.modal_data.get("modal_awal", 0)), 
             step=100000,
+            format="%d",  # pastikan tampil sebagai angka bulat
             key="modal_awal_input"
         )
         st.session_state.modal_data["modal_awal"] = modal_awal
+
         
         st.markdown("---")
         
