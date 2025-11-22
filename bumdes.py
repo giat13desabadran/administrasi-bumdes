@@ -580,7 +580,7 @@ with tab3:
     # Info counter
     total_rows = len(st.session_state.neraca_saldo)
     filled_rows = len(st.session_state.neraca_saldo[st.session_state.neraca_saldo["Akun"].astype(str).str.strip() != ""])
-    st.caption(f"📊 Total Baris: {total_rows} | Terisi: {filled_rows} | Kosong: {total_rows - filled_rows}")
+    #st.caption(f"📊 Total Baris: {total_rows} | Terisi: {filled_rows} | Kosong: {total_rows - filled_rows}")
 
     # --- Sistem Penghapusan dengan Checkbox ---
     df_terisi = st.session_state.neraca_saldo[st.session_state.neraca_saldo["Akun"].astype(str).str.strip() != ""]
