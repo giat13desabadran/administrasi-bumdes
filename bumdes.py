@@ -339,10 +339,10 @@ with tab1:
             import calendar
             from fpdf import FPDF
             import tempfile
-            import math
         
             pdf = FPDF()
             pdf.add_page()
+            pdf.set_auto_page_break(auto=False)  # kita handle page break manual
             pdf.set_font("Arial", size=12)
         
             # Nama bulan
@@ -364,22 +364,42 @@ with tab1:
             headers = ["Tanggal", "Keterangan", "Ref", "Akun", "Debit (Rp)", "Kredit (Rp)"]
             col_widths = [20, 60, 20, 30, 35, 35]
             line_height = 6
+            align = ["C", "L", "C", "C", "R", "R"]
         
-            pdf.set_font("Arial", "B", 10)
-            for i, header in enumerate(headers):
-                pdf.cell(col_widths[i], line_height, header, border=1, align="C")
-            pdf.ln(line_height)
+            def print_header():
+                pdf.set_font("Arial", "B", 10)
+                for i, header in enumerate(headers):
+                    pdf.cell(col_widths[i], line_height, header, border=1, align="C")
+                pdf.ln(line_height)
+                pdf.set_font("Arial", "", 9)
+        
+            print_header()
+        
+            def calc_lines(text, col_width):
+                """Hitung perkiraan jumlah baris untuk multi_cell"""
+                text = str(text)
+                if not text:
+                    return 1
+                words = text.split()
+                lines = 1
+                line_width = 0
+                for word in words:
+                    w = pdf.get_string_width(word + " ")
+                    line_width += w
+                    if line_width > col_width:
+                        lines += 1
+                        line_width = w
+                return lines
         
             # Isi tabel
-            pdf.set_font("Arial", "", 9)
             for _, row in df.iterrows():
-                # Tentukan jumlah baris tertinggi untuk multi_cell
-                max_lines = 1
-                for col, width in zip(["Tanggal", "Keterangan", "Ref", "Akun", "Debit (Rp)", "Kredit (Rp)"], col_widths):
-                    text = str(row[col])
-                    lines = math.ceil(len(text) / (width / 2))  # perkiraan sederhana
-                    if lines > max_lines:
-                        max_lines = lines
+                # Hitung max baris untuk semua kolom
+                max_lines = max([calc_lines(row[col], col_widths[i]) for i, col in enumerate(headers)])
+        
+                # Cek page break
+                if pdf.get_y() + (line_height * max_lines) > pdf.page_break_trigger:
+                    pdf.add_page()
+                    print_header()
         
                 y_start = pdf.get_y()
                 x_start = pdf.get_x()
@@ -395,17 +415,10 @@ with tab1:
                 ]
         
                 for i, value in enumerate(col_values):
-                    pdf.multi_cell(
-                        col_widths[i],
-                        line_height,
-                        value,
-                        border=1,
-                        align="C" if i in [0,2,3] else ("R" if i>=4 else "L")
-                    )
-                    # Set posisi untuk kolom berikutnya di baris yang sama
-                    x_new = x_start + col_widths[i]
-                    pdf.set_xy(x_new, y_start)
-                    x_start = x_new
+                    x_current = pdf.get_x()
+                    pdf.multi_cell(col_widths[i], line_height, value, border=1, align=align[i])
+                    # Set posisi kolom berikutnya tetap di baris yang sama
+                    pdf.set_xy(x_current + col_widths[i], y_start)
         
                 # Pindah ke baris berikutnya
                 pdf.ln(line_height * max_lines)
@@ -421,8 +434,6 @@ with tab1:
                 tmp.seek(0)
                 return tmp.read()
 
-    
-            
         pdf_data = buat_pdf(df_final, bulan_selected, tahun_selected)
         st.download_button(
             "📥 Download PDF",
