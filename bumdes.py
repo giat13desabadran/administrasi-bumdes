@@ -683,7 +683,7 @@ with tab3:
         })
 
         df_neraca_final = pd.concat([df_neraca_clean, total_row], ignore_index=True)
-        df_neraca_final.index = range(1, len(df_neraca_final) + 1)
+        df_neraca_final.index = range(len(df_neraca_final))
         df_neraca_final.index.name = "No"
 
         st.write("### 📊 Hasil Neraca Saldo")
