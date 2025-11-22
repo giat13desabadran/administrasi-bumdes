@@ -542,7 +542,7 @@ with tab2:
                     tmp.seek(0)
                     return tmp.read()
 
-            pdf_semua = buat_pdf_buku_besar_semua(st.session_state.buku_besar)
+            pdf_semua = buat_pdf_buku_besar(st.session_state.buku_besar)
             st.download_button(
                 "📥 Download PDF Buku Besar",
                 data=pdf_semua,
