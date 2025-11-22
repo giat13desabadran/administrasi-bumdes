@@ -342,7 +342,7 @@ with tab1:
         
             pdf = FPDF()
             pdf.add_page()
-            pdf.set_auto_page_break(auto=False)  # kita handle page break manual
+            pdf.set_auto_page_break(auto=False)  # handle manual
             pdf.set_font("Arial", size=12)
         
             # Nama bulan
@@ -360,9 +360,11 @@ with tab1:
             pdf.cell(0, 10, txt=f"Jurnal Umum BUMDes - {bulan_nama} {tahun}", ln=True, align="C")
             pdf.ln(8)
         
-            # Header kolom
+            # Lebar halaman efektif (A4 = 210 mm, margin default 10 mm)
+            page_width = 210 - 20  # margin kiri+kanan 10 mm
+            # Tentukan proporsi kolom, pastikan total ≤ page_width
+            col_widths = [20, 60, 15, 25, 35, 35]  # total = 190 mm, aman
             headers = ["Tanggal", "Keterangan", "Ref", "Akun", "Debit (Rp)", "Kredit (Rp)"]
-            col_widths = [20, 60, 20, 30, 35, 35]
             line_height = 6
             align = ["C", "L", "C", "C", "R", "R"]
         
@@ -376,7 +378,6 @@ with tab1:
             print_header()
         
             def calc_lines(text, col_width):
-                """Hitung perkiraan jumlah baris untuk multi_cell"""
                 text = str(text)
                 if not text:
                     return 1
@@ -391,7 +392,6 @@ with tab1:
                         line_width = w
                 return lines
         
-            # Isi tabel
             for _, row in df.iterrows():
                 # Hitung max baris untuk semua kolom
                 max_lines = max([calc_lines(row[col], col_widths[i]) for i, col in enumerate(headers)])
@@ -417,10 +417,9 @@ with tab1:
                 for i, value in enumerate(col_values):
                     x_current = pdf.get_x()
                     pdf.multi_cell(col_widths[i], line_height, value, border=1, align=align[i])
-                    # Set posisi kolom berikutnya tetap di baris yang sama
+                    # reset posisi X ke kolom berikutnya, tetap di baris yang sama
                     pdf.set_xy(x_current + col_widths[i], y_start)
         
-                # Pindah ke baris berikutnya
                 pdf.ln(line_height * max_lines)
         
             # Footer
@@ -433,6 +432,7 @@ with tab1:
                 pdf.output(tmp.name)
                 tmp.seek(0)
                 return tmp.read()
+
 
         pdf_data = buat_pdf(df_final, bulan_selected, tahun_selected)
         st.download_button(
