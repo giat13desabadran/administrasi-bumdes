@@ -650,9 +650,11 @@ with tab3:
             gb.configure_column(col, type=["numericColumn"], valueFormatter="value ? value.toLocaleString() : ''")
     
     grid_options = gb.build()
+
+    df_neraca_for_grid = st.session_state.neraca_saldo.reset_index(drop=True)
     
     grid_response = AgGrid(
-        st.session_state.neraca_saldo,
+        df_neraca_for_grid,
         gridOptions=grid_options,
         update_mode=GridUpdateMode.VALUE_CHANGED,
         fit_columns_on_grid_load=True,
@@ -683,7 +685,7 @@ with tab3:
         })
 
         df_neraca_final = pd.concat([df_neraca_clean, total_row], ignore_index=True)
-        df_neraca_final.index = range(len(df_neraca_final))
+        df_neraca_final.index = range(1, len(df_neraca_final) + 1)
         df_neraca_final.index.name = "No"
 
         st.write("### 📊 Hasil Neraca Saldo")
