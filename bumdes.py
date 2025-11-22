@@ -1561,7 +1561,7 @@ with tab4:
             st.session_state.laporan_refresh += 1
             st.rerun()
         
-        st.info("💡 Input manual untuk aktivitas arus kas.")
+        #st.info("💡 Input manual untuk aktivitas arus kas.")
         
         if "arus_kas_refresh" not in st.session_state:
             st.session_state.arus_kas_refresh = 0
