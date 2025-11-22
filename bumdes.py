@@ -339,6 +339,7 @@ with tab1:
             import calendar
             from fpdf import FPDF
             import tempfile
+            import math
         
             pdf = FPDF()
             pdf.add_page()
@@ -372,20 +373,18 @@ with tab1:
             # Isi tabel
             pdf.set_font("Arial", "", 9)
             for _, row in df.iterrows():
-                max_lines = 1  # untuk multi_cell per baris
-        
-                # Hitung jumlah baris tertinggi karena keterangan bisa panjang
-                import math
+                # Tentukan jumlah baris tertinggi untuk multi_cell
+                max_lines = 1
                 for col, width in zip(["Tanggal", "Keterangan", "Ref", "Akun", "Debit (Rp)", "Kredit (Rp)"], col_widths):
                     text = str(row[col])
-                    lines = math.ceil(len(text)/ (width / 2))  # perkiraan
+                    lines = math.ceil(len(text) / (width / 2))  # perkiraan sederhana
                     if lines > max_lines:
                         max_lines = lines
         
                 y_start = pdf.get_y()
                 x_start = pdf.get_x()
         
-                # Tulis setiap kolom
+                # Nilai kolom
                 col_values = [
                     str(row["Tanggal"]),
                     str(row["Keterangan"]),
@@ -396,11 +395,19 @@ with tab1:
                 ]
         
                 for i, value in enumerate(col_values):
-                    pdf.multi_cell(col_widths[i], line_height, value, border=1, align="C" if i in [0,2,3] else ("R" if i>=4 else "L"), ln=3)
+                    pdf.multi_cell(
+                        col_widths[i],
+                        line_height,
+                        value,
+                        border=1,
+                        align="C" if i in [0,2,3] else ("R" if i>=4 else "L")
+                    )
+                    # Set posisi untuk kolom berikutnya di baris yang sama
                     x_new = x_start + col_widths[i]
                     pdf.set_xy(x_new, y_start)
                     x_start = x_new
         
+                # Pindah ke baris berikutnya
                 pdf.ln(line_height * max_lines)
         
             # Footer
@@ -408,11 +415,12 @@ with tab1:
             pdf.set_font("Arial", 'I', 8)
             pdf.cell(0, 5, txt="Dicetak dari Sistem Akuntansi BUMDes", ln=True, align="C")
         
-            # Simpan ke temp file
+            # Simpan ke temp file dan kembalikan bytes
             with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                 pdf.output(tmp.name)
                 tmp.seek(0)
                 return tmp.read()
+
     
             
         pdf_data = buat_pdf(df_final, bulan_selected, tahun_selected)
