@@ -184,50 +184,34 @@ def _signature_buku_besar(bb: dict) -> str:
 def sync_neraca_from_bukubesar(non_destructive: bool = True):
     bb = st.session_state.get("buku_besar", {})
     if not bb:
+        st.session_state.neraca_saldo = pd.DataFrame(columns=["Ref", "Akun", "Debit (Rp)", "Kredit (Rp)"])
         return
 
-    ns = st.session_state.get("neraca_saldo")
-    if ns is None or ns.empty:
-        ns = pd.DataFrame(columns=["Ref", "Akun", "Debit (Rp)", "Kredit (Rp)"])
+    # Inisialisasi DataFrame Neraca Saldo
+    ns = pd.DataFrame(columns=["Ref", "Akun", "Debit (Rp)", "Kredit (Rp)"])
 
-    # Normalisasi nilai
-    ns["Ref"] = ns["Ref"].astype(str).str.strip()
-    ns["Akun"] = ns["Akun"].astype(str).str.strip()
-    ns["Debit (Rp)"] = pd.to_numeric(ns.get("Debit (Rp)", 0), errors="coerce").fillna(0)
-    ns["Kredit (Rp)"] = pd.to_numeric(ns.get("Kredit (Rp)", 0), errors="coerce").fillna(0)
-
-    ns_idx = {ns.loc[i, "Ref"]: i for i in ns.index if str(ns.loc[i, "Ref"]).strip() != ""}
-
-    rows_to_add = []
-    for ref, data in bb.items():
-        ref_str = str(ref).strip()
-        nama = data.get("nama_akun", f"Akun {ref_str}")
+    rows = []
+    for key, data in bb.items():
+        ref = key if key != data["nama_akun"] else ""  # kalau key sama dengan nama akun, berarti ref kosong
+        nama_akun = data["nama_akun"] if data["nama_akun"] else key
         debit = float(data.get("debit", 0) or 0)
         kredit = float(data.get("kredit", 0) or 0)
-        net_debit = max(debit - kredit, 0)
-        net_kredit = max(kredit - debit, 0)
 
-        if ref_str in ns_idx:
-            idx = ns_idx[ref_str]
-            ns.at[idx, "Akun"] = nama or ns.at[idx, "Akun"]
-            ns.at[idx, "Debit (Rp)"] = net_debit
-            ns.at[idx, "Kredit (Rp)"] = net_kredit
-        else:
-            rows_to_add.append({
-                "Ref": ref_str,
-                "Akun": nama,
-                "Debit (Rp)": net_debit,
-                "Kredit (Rp)": net_kredit
-            })
+        rows.append({
+            "Ref": ref,
+            "Akun": nama_akun,
+            "Debit (Rp)": debit,
+            "Kredit (Rp)": kredit
+        })
 
-    if rows_to_add:
-        ns = pd.concat([ns, pd.DataFrame(rows_to_add)], ignore_index=True)
+    ns = pd.DataFrame(rows)
 
     if not non_destructive:
-        # Overwrite penuh: hapus baris yang Ref-nya tidak ada di Buku Besar
-        refs_bb = set(str(k).strip() for k in bb.keys())
-        ns = ns[ns["Ref"].astype(str).str.strip().isin(refs_bb)]
+        # Hanya tampilkan Ref yang ada di buku besar
+        refs_bb = set(str(k) for k in bb.keys())
+        ns = ns[ns["Ref"].astype(str).isin(refs_bb)]
 
+    # Reset index
     st.session_state.neraca_saldo = ns.reset_index(drop=True)
 
 # === Styling AgGrid ===
