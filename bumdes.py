@@ -359,43 +359,49 @@ with tab1:
             col_widths = [25, 80, 40, 40]  # keterangan lebih lebar
             line_height = 6
         
-            # Header
-            pdf.set_font("Arial", size=10, style="B")
-            headers = ["Tanggal", "Keterangan", "Debit (Rp)", "Kredit (Rp)"]
-            for i, header in enumerate(headers):
-                pdf.cell(col_widths[i], line_height + 2, header, border=1, align="C")
-            pdf.ln()
+            # Header PDF
+            headers = ["Tanggal", "Keterangan", "Ref", "Akun", "Debit (Rp)", "Kredit (Rp)"]
+            col_widths = [20, 50, 20, 30, 35, 35]  # atur lebar kolom sesuai kebutuhan
             
-            # Isi tabel
-            pdf.set_font("Arial", size=9)
+            # Isi tabel PDF
             for _, row in df.iterrows():
-                # Simpan posisi awal X, Y
                 x_start = pdf.get_x()
                 y_start = pdf.get_y()
-        
+            
                 # Tanggal
                 pdf.multi_cell(col_widths[0], line_height, str(row["Tanggal"]), border=1, align="C")
                 x_after = x_start + col_widths[0]
-        
+            
                 # Keterangan
                 pdf.set_xy(x_after, y_start)
                 pdf.multi_cell(col_widths[1], line_height, str(row["Keterangan"]), border=1, align="L")
                 x_after += col_widths[1]
-        
+            
+                # Ref
+                pdf.set_xy(x_after, y_start)
+                pdf.multi_cell(col_widths[2], line_height, str(row["Ref"]), border=1, align="C")
+                x_after += col_widths[2]
+            
+                # Akun
+                pdf.set_xy(x_after, y_start)
+                pdf.multi_cell(col_widths[3], line_height, str(row["Akun"]), border=1, align="C")
+                x_after += col_widths[3]
+            
                 # Debit
                 pdf.set_xy(x_after, y_start)
                 debit_str = f"{row['Debit (Rp)']:,.0f}".replace(",", ".") if pd.notna(row['Debit (Rp)']) else "0"
-                pdf.multi_cell(col_widths[2], line_height, debit_str, border=1, align="R")
-                x_after += col_widths[2]
-        
+                pdf.multi_cell(col_widths[4], line_height, debit_str, border=1, align="R")
+                x_after += col_widths[4]
+            
                 # Kredit
                 pdf.set_xy(x_after, y_start)
                 kredit_str = f"{row['Kredit (Rp)']:,.0f}".replace(",", ".") if pd.notna(row['Kredit (Rp)']) else "0"
-                pdf.multi_cell(col_widths[3], line_height, kredit_str, border=1, align="R")
-        
-                # Pindah ke baris berikutnya sesuai tinggi terbesar
+                pdf.multi_cell(col_widths[5], line_height, kredit_str, border=1, align="R")
+            
+                # Pindah ke baris berikutnya
                 y_new = pdf.get_y()
                 pdf.set_y(y_new)
+
         
             # Footer
             pdf.ln(5)
